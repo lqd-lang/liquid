@@ -10,7 +10,7 @@ use codegem::{
     },
     ir::ModuleBuilder,
 };
-use frontend::{Expr, LowerToCodegem, Parse};
+use frontend::{expr::Expr, LowerToCodegem, Parse};
 use miette::{bail, miette};
 
 fn main() -> miette::Result<()> {
@@ -20,8 +20,9 @@ fn main() -> miette::Result<()> {
     let expr = Expr::parse(&input).unwrap().1;
     let mut builder = ModuleBuilder::default();
     expr.lower_to_code_gem(&mut builder)?;
+    println!("{:#?}", expr);
     let module = builder.build();
-    // println!("{}", module);
+    println!("{}", module);
 
     if !PathBuf::from("result").exists() {
         fs::create_dir_all("result").unwrap();

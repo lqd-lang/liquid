@@ -4,7 +4,7 @@ use nom::{
     character::complete::{multispace0, multispace1},
 };
 
-use crate::{identifier::Identifier, Expr, GetType, LowerToCodegem, Parse};
+use crate::{expr::Expr, identifier::Identifier, GetType, LowerToCodegem, Parse};
 
 #[derive(PartialEq, Debug)]
 pub struct VarAssign {
@@ -40,14 +40,6 @@ impl LowerToCodegem for VarAssign {
         let var_id = builder
             .push_variable(&self.id.0, &self.val.get_type()?)
             .expect("Failed to create variable");
-        // ZERO
-        // let value = builder
-        //     .push_instruction(
-        //         &Type::Integer(true, 4),
-        //         Operation::Integer(true, 0_i64.to_le_bytes().to_vec()),
-        //     )
-        //     .unwrap();
-        dbg!(self);
         let value = self.val.lower_to_code_gem(builder)?.unwrap();
         builder.push_instruction(&Type::Void, Operation::SetVar(var_id, value));
 
@@ -63,7 +55,7 @@ impl GetType for VarAssign {
 
 #[cfg(test)]
 mod tests {
-    use crate::{identifier::Identifier, literal::Literal, Expr, Parse};
+    use crate::{expr::Expr, identifier::Identifier, literal::Literal, Parse};
 
     use super::VarAssign;
 
