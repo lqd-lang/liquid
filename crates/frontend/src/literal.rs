@@ -1,6 +1,8 @@
+use codegem::ir::{Operation, Type};
+use miette::Result;
 use nom::{branch::alt, character::complete::i64, Parser};
 
-use crate::Parse;
+use crate::{GetType, LowerToCodegem, Parse};
 
 #[derive(PartialEq, Debug)]
 pub enum Literal {
@@ -20,6 +22,28 @@ impl Parse for Literal {
 impl Parse for i64 {
     fn parse(input: &str) -> nom::IResult<&str, Self> {
         i64(input)
+    }
+}
+
+impl GetType for Literal {
+    fn get_type(&self) -> Result<Type> {
+        Ok(match self {
+            Literal::Int(_) => Type::Integer(true, 4),
+        })
+    }
+}
+
+impl LowerToCodegem for Literal {
+    fn lower_to_code_gem(
+        &self,
+        builder: &mut codegem::ir::ModuleBuilder,
+    ) -> Result<Option<codegem::ir::Value>> {
+        match self {
+            Literal::Int(num) => Ok(builder.push_instruction(
+                &Type::Integer(true, 64),
+                Operation::Integer(true, num.to_le_bytes().to_vec()),
+            )),
+        }
     }
 }
 

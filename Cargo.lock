@@ -119,6 +119,11 @@ dependencies = [
 ]
 
 [[package]]
+name = "codegem"
+version = "0.1.0"
+source = "git+https://github.com/code-gem/codegem#84371e81e660b0a36d30b30f3a5b88d29d8a2457"
+
+[[package]]
 name = "errno"
 version = "0.2.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -143,6 +148,7 @@ dependencies = [
 name = "frontend"
 version = "0.1.0"
 dependencies = [
+ "codegem",
  "miette",
  "nom",
  "thiserror",
@@ -243,6 +249,8 @@ name = "lqdc"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "codegem",
+ "frontend",
  "miette",
  "thiserror",
 ]

@@ -1,9 +1,10 @@
+use codegem::ir::{Operation, Type, Value};
 use nom::{
     bytes::complete::tag,
     character::complete::{multispace0, multispace1},
 };
 
-use crate::{identifier::Identifier, Expr, Parse};
+use crate::{identifier::Identifier, Expr, GetType, LowerToCodegem, Parse};
 
 #[derive(PartialEq, Debug)]
 pub struct VarAssign {
@@ -28,6 +29,35 @@ impl Parse for VarAssign {
                 val: Box::new(val),
             },
         ))
+    }
+}
+
+impl LowerToCodegem for VarAssign {
+    fn lower_to_code_gem(
+        &self,
+        builder: &mut codegem::ir::ModuleBuilder,
+    ) -> miette::Result<Option<Value>> {
+        let var_id = builder
+            .push_variable(&self.id.0, &self.val.get_type()?)
+            .expect("Failed to create variable");
+        // ZERO
+        // let value = builder
+        //     .push_instruction(
+        //         &Type::Integer(true, 4),
+        //         Operation::Integer(true, 0_i64.to_le_bytes().to_vec()),
+        //     )
+        //     .unwrap();
+        dbg!(self);
+        let value = self.val.lower_to_code_gem(builder)?.unwrap();
+        builder.push_instruction(&Type::Void, Operation::SetVar(var_id, value));
+
+        Ok(None)
+    }
+}
+
+impl GetType for VarAssign {
+    fn get_type(&self) -> miette::Result<Type> {
+        Ok(Type::Void)
     }
 }
 
