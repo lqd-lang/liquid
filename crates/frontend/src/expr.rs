@@ -3,7 +3,11 @@ use miette::Result;
 use nom::{branch::alt, IResult, Parser};
 
 use crate::{
-    function::Function, literal::Literal, var_assign::VarAssign, GetType, LowerToCodegem, Parse,
+    bin_op::{BinOp, Factor},
+    function::Function,
+    literal::Literal,
+    var_assign::VarAssign,
+    GetType, LowerToCodegem, Parse,
 };
 
 #[derive(Debug, PartialEq)]
@@ -11,16 +15,18 @@ pub enum Expr {
     Literal(Literal),
     VarAssign(VarAssign),
     Function(Function),
-    // Block(Block),
+    Factor(Factor),
+    BinOp(BinOp),
 }
 
 impl Parse for Expr {
     fn parse(input: &str) -> IResult<&str, Self> {
         alt((
-            // Block::parse.map(Self::Block),
-            Literal::parse.map(Self::Literal),
             VarAssign::parse.map(Self::VarAssign),
             Function::parse.map(Self::Function),
+            BinOp::parse.map(Self::BinOp),
+            Factor::parse.map(Self::Factor),
+            Literal::parse.map(Self::Literal),
         ))(input)
     }
 }
@@ -31,7 +37,8 @@ impl LowerToCodegem for Expr {
             Expr::Literal(literal) => literal.lower_to_code_gem(builder),
             Expr::VarAssign(var_assign) => var_assign.lower_to_code_gem(builder),
             Expr::Function(function) => function.lower_to_code_gem(builder),
-            // Expr::Block(block) => todo!(),
+            Expr::Factor(factor) => factor.lower_to_code_gem(builder),
+            Expr::BinOp(bin_op) => bin_op.lower_to_code_gem(builder),
         }
     }
 }
@@ -42,7 +49,8 @@ impl GetType for Expr {
             Expr::Literal(l) => l.get_type()?,
             Expr::VarAssign(v) => v.get_type()?,
             Expr::Function(f) => f.get_type()?,
-            // Expr::Block(b) => todo!(),
+            Expr::Factor(f) => f.get_type()?,
+            Expr::BinOp(b) => b.get_type()?,
         })
     }
 }

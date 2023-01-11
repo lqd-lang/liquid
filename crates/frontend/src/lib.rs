@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate lazy_static;
 
+mod bin_op;
 pub mod block;
 pub mod expr;
 mod function;
