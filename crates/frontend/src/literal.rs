@@ -37,7 +37,7 @@ impl LowerToCodegem for Literal {
     fn lower_to_code_gem(
         &self,
         builder: &mut ModuleBuilder,
-        context: &mut Context,
+        _context: &mut Context,
     ) -> Result<Option<codegem::ir::Value>> {
         match self {
             Literal::Int(num) => Ok(builder.push_instruction(

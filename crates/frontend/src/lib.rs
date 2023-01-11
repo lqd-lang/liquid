@@ -19,8 +19,10 @@ use miette::Result;
 use nom::IResult;
 
 lazy_static! {
-    static ref TYPES: HashMap<String, Type> =
-        HashMap::from([("int".to_string(), Type::Integer(true, 64))]);
+    static ref TYPES: HashMap<String, Type> = HashMap::from([
+        ("int".to_string(), Type::Integer(true, 64)),
+        ("void".to_string(), Type::Void)
+    ]);
 }
 
 #[derive(Default)]
