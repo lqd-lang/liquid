@@ -1,8 +1,8 @@
-use codegem::ir::{Operation, Type};
+use codegem::ir::{ModuleBuilder, Operation, Type};
 use miette::Result;
 use nom::{branch::alt, character::complete::i64, Parser};
 
-use crate::{GetType, LowerToCodegem, Parse};
+use crate::{Context, GetType, LowerToCodegem, Parse};
 
 #[derive(PartialEq, Debug)]
 pub enum Literal {
@@ -36,7 +36,8 @@ impl GetType for Literal {
 impl LowerToCodegem for Literal {
     fn lower_to_code_gem(
         &self,
-        builder: &mut codegem::ir::ModuleBuilder,
+        builder: &mut ModuleBuilder,
+        context: &mut Context,
     ) -> Result<Option<codegem::ir::Value>> {
         match self {
             Literal::Int(num) => Ok(builder.push_instruction(

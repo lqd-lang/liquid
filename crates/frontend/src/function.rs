@@ -10,7 +10,7 @@ use nom::{
     IResult, Parser,
 };
 
-use crate::{block::Block, identifier::Identifier, GetType, LowerToCodegem, Parse, TYPES};
+use crate::{block::Block, identifier::Identifier, Context, GetType, LowerToCodegem, Parse, TYPES};
 
 pub struct Function {
     pub id: Identifier,
@@ -65,12 +65,16 @@ impl Parse for Function {
     }
 }
 impl LowerToCodegem for Function {
-    fn lower_to_code_gem(&self, builder: &mut ModuleBuilder) -> Result<Option<Value>> {
+    fn lower_to_code_gem(
+        &self,
+        builder: &mut ModuleBuilder,
+        context: &mut Context,
+    ) -> Result<Option<Value>> {
         let func_id = builder.new_function(&self.id.0, &[], &self.return_type);
         builder.switch_to_function(func_id);
         let entry_block = builder.push_block().expect("Failed to create entry block");
         builder.switch_to_block(entry_block);
-        self.block.lower_to_code_gem(builder)?;
+        self.block.lower_to_code_gem(builder, context)?;
 
         Ok(None)
     }

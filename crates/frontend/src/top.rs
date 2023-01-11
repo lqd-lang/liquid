@@ -2,7 +2,7 @@ use codegem::ir::{ModuleBuilder, Value};
 use miette::{bail, miette, Result};
 use nom::{character::complete::multispace0, multi::many1, sequence::delimited};
 
-use crate::{function::Function, LowerToCodegem, Parse};
+use crate::{function::Function, Context, LowerToCodegem, Parse};
 
 #[derive(Debug)]
 pub struct Top {
@@ -19,7 +19,11 @@ impl Parse for Top {
 }
 
 impl LowerToCodegem for Top {
-    fn lower_to_code_gem(&self, builder: &mut ModuleBuilder) -> Result<Option<Value>> {
+    fn lower_to_code_gem(
+        &self,
+        builder: &mut ModuleBuilder,
+        context: &mut Context,
+    ) -> Result<Option<Value>> {
         if !self
             .functions
             .iter()
@@ -29,7 +33,7 @@ impl LowerToCodegem for Top {
         }
 
         for function in &self.functions {
-            function.lower_to_code_gem(builder)?;
+            function.lower_to_code_gem(builder, context)?;
         }
 
         Ok(None)

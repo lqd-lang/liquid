@@ -10,7 +10,7 @@ use codegem::{
     },
     ir::ModuleBuilder,
 };
-use frontend::{top::Top, LowerToCodegem, Parse};
+use frontend::{top::Top, Context, LowerToCodegem, Parse};
 use miette::{bail, miette};
 
 fn main() -> miette::Result<()> {
@@ -26,8 +26,9 @@ fn main() -> miette::Result<()> {
             .to_str()
             .unwrap(),
     );
-    top.lower_to_code_gem(&mut builder)?;
-    println!("{:#?}", top);
+    let mut context = Context::default();
+    top.lower_to_code_gem(&mut builder, &mut context)?;
+    // println!("{:#?}", top);
     let module = builder.build();
     println!("{}", module);
 

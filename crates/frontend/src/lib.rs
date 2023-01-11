@@ -8,11 +8,12 @@ mod function;
 mod identifier;
 mod literal;
 pub mod top;
+mod var;
 mod var_assign;
 
 use std::collections::HashMap;
 
-use codegem::ir::{ModuleBuilder, Type, Value};
+use codegem::ir::{ModuleBuilder, Type, Value, VariableId};
 
 use miette::Result;
 use nom::IResult;
@@ -22,12 +23,21 @@ lazy_static! {
         HashMap::from([("int".to_string(), Type::Integer(true, 64))]);
 }
 
+#[derive(Default)]
+pub struct Context {
+    vars: HashMap<String, (VariableId, Type)>,
+}
+
 pub trait Parse: Sized {
     fn parse(input: &str) -> IResult<&str, Self>;
 }
 
 pub trait LowerToCodegem {
-    fn lower_to_code_gem(&self, builder: &mut ModuleBuilder) -> Result<Option<Value>>;
+    fn lower_to_code_gem(
+        &self,
+        builder: &mut ModuleBuilder,
+        context: &mut Context,
+    ) -> Result<Option<Value>>;
 }
 
 trait GetType {

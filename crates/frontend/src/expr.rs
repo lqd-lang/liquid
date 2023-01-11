@@ -6,8 +6,9 @@ use crate::{
     bin_op::{BinOp, Factor},
     function::Function,
     literal::Literal,
+    var::Var,
     var_assign::VarAssign,
-    GetType, LowerToCodegem, Parse,
+    Context, GetType, LowerToCodegem, Parse,
 };
 
 #[derive(Debug, PartialEq)]
@@ -17,13 +18,17 @@ pub enum Expr {
     Function(Function),
     Factor(Factor),
     BinOp(BinOp),
+    Var(Var),
 }
 
 impl Parse for Expr {
     fn parse(input: &str) -> IResult<&str, Self> {
         alt((
+            // These must go first because they use keywords, which could be interpreted as identifiers
             VarAssign::parse.map(Self::VarAssign),
             Function::parse.map(Self::Function),
+            //
+            Var::parse.map(Self::Var),
             BinOp::parse.map(Self::BinOp),
             Factor::parse.map(Self::Factor),
             Literal::parse.map(Self::Literal),
@@ -32,13 +37,18 @@ impl Parse for Expr {
 }
 
 impl LowerToCodegem for Expr {
-    fn lower_to_code_gem(&self, builder: &mut ModuleBuilder) -> Result<Option<Value>> {
+    fn lower_to_code_gem(
+        &self,
+        builder: &mut ModuleBuilder,
+        context: &mut Context,
+    ) -> Result<Option<Value>> {
         match self {
-            Expr::Literal(literal) => literal.lower_to_code_gem(builder),
-            Expr::VarAssign(var_assign) => var_assign.lower_to_code_gem(builder),
-            Expr::Function(function) => function.lower_to_code_gem(builder),
-            Expr::Factor(factor) => factor.lower_to_code_gem(builder),
-            Expr::BinOp(bin_op) => bin_op.lower_to_code_gem(builder),
+            Expr::Literal(literal) => literal.lower_to_code_gem(builder, context),
+            Expr::Var(var) => var.lower_to_code_gem(builder, context),
+            Expr::VarAssign(var_assign) => var_assign.lower_to_code_gem(builder, context),
+            Expr::Function(function) => function.lower_to_code_gem(builder, context),
+            Expr::Factor(factor) => factor.lower_to_code_gem(builder, context),
+            Expr::BinOp(bin_op) => bin_op.lower_to_code_gem(builder, context),
         }
     }
 }
@@ -51,6 +61,7 @@ impl GetType for Expr {
             Expr::Function(f) => f.get_type()?,
             Expr::Factor(f) => f.get_type()?,
             Expr::BinOp(b) => b.get_type()?,
+            Expr::Var(v) => v.get_type()?,
         })
     }
 }

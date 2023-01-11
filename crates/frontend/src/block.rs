@@ -7,7 +7,7 @@ use nom::{
     Parser,
 };
 
-use crate::{expr::Expr, LowerToCodegem, Parse};
+use crate::{expr::Expr, Context, LowerToCodegem, Parse};
 
 #[derive(PartialEq, Debug)]
 pub struct Block {
@@ -28,7 +28,11 @@ impl Parse for Block {
 }
 
 impl LowerToCodegem for Block {
-    fn lower_to_code_gem(&self, builder: &mut ModuleBuilder) -> miette::Result<Option<Value>> {
+    fn lower_to_code_gem(
+        &self,
+        builder: &mut ModuleBuilder,
+        context: &mut Context,
+    ) -> miette::Result<Option<Value>> {
         let block = builder
             .push_block()
             .expect("Failed to create a block, not in a function");
@@ -36,7 +40,7 @@ impl LowerToCodegem for Block {
 
         let mut result = Option::<Value>::None;
         for expr in &self.exprs {
-            result = expr.lower_to_code_gem(builder)?;
+            result = expr.lower_to_code_gem(builder, context)?;
         }
 
         Ok(result)
