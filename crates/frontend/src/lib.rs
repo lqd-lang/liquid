@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate lazy_static;
+
 pub mod block;
 pub mod expr;
 mod function;
@@ -5,10 +8,17 @@ mod identifier;
 mod literal;
 mod var_assign;
 
+use std::collections::HashMap;
+
 use codegem::ir::{ModuleBuilder, Type, Value};
 
 use miette::Result;
 use nom::IResult;
+
+lazy_static! {
+    static ref TYPES: HashMap<String, Type> =
+        HashMap::from([("int".to_string(), Type::Integer(true, 64))]);
+}
 
 pub trait Parse: Sized {
     fn parse(input: &str) -> IResult<&str, Self>;
