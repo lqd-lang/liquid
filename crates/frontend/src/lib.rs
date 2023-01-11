@@ -1,14 +1,26 @@
-pub fn add(left: usize, right: usize) -> usize {
-    left + right
+mod identifier;
+mod literal;
+mod var_assign;
+
+use literal::Literal;
+use nom::{branch::alt, IResult, Parser};
+use var_assign::VarAssign;
+
+trait Parse: Sized {
+    fn parse(input: &str) -> IResult<&str, Self>;
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+#[derive(Debug, PartialEq)]
+enum Expr {
+    Literal(Literal),
+    VarAssign(VarAssign),
+}
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
+impl Parse for Expr {
+    fn parse(input: &str) -> IResult<&str, Self> {
+        alt((
+            Literal::parse.map(|x| Self::Literal(x)),
+            VarAssign::parse.map(|x| Self::VarAssign(x)),
+        ))(input)
     }
 }
