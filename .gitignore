@@ -1,1 +1,4 @@
 target/
+result/
+# For testing
+example.lqd
