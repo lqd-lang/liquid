@@ -6,6 +6,7 @@ pub mod expr;
 mod function;
 mod identifier;
 mod literal;
+pub mod top;
 mod var_assign;
 
 use std::collections::HashMap;

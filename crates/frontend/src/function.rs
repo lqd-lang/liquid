@@ -13,7 +13,7 @@ use nom::{
 use crate::{block::Block, identifier::Identifier, GetType, LowerToCodegem, Parse, TYPES};
 
 pub struct Function {
-    id: Identifier,
+    pub id: Identifier,
     block: Block,
     return_type: Type,
 }

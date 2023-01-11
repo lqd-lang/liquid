@@ -10,17 +10,24 @@ use codegem::{
     },
     ir::ModuleBuilder,
 };
-use frontend::{expr::Expr, LowerToCodegem, Parse};
+use frontend::{top::Top, LowerToCodegem, Parse};
 use miette::{bail, miette};
 
 fn main() -> miette::Result<()> {
     let cli = Cli::parse();
     let input = fs::read_to_string(&cli.file).expect("File does not exist");
 
-    let expr = Expr::parse(&input).unwrap().1;
-    let mut builder = ModuleBuilder::default();
-    expr.lower_to_code_gem(&mut builder)?;
-    println!("{:#?}", expr);
+    let top = Top::parse(&input).unwrap().1;
+    let mut builder = ModuleBuilder::default().with_name(
+        cli.file
+            .with_extension("")
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap(),
+    );
+    top.lower_to_code_gem(&mut builder)?;
+    println!("{:#?}", top);
     let module = builder.build();
     println!("{}", module);
 
