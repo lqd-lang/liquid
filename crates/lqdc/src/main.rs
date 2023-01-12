@@ -24,8 +24,6 @@ fn main() -> miette::Result<()> {
 
     let module = builder.build();
 
-    println!("{}", module);
-
     if !PathBuf::from("result").exists() {
         fs::create_dir_all("result").unwrap();
     }
@@ -33,15 +31,18 @@ fn main() -> miette::Result<()> {
     match cli.target.as_str() {
         "rv64" => {
             let vcode = module.lower_to_vcode::<RvInstruction, RvSelector>();
-            fs::write("result/output.asm", format!("{}", vcode)).unwrap();
+            fs::write(&cli.output, format!("{}", vcode)).unwrap();
         }
         "urcl" => {
             let vcode = module.lower_to_vcode::<UrclInstruction, UrclSelector>();
-            fs::write("result/output.urcl", format!("{}", vcode)).unwrap();
+            fs::write(&cli.output, format!("{}", vcode)).unwrap();
         }
         "x64" => {
             let vcode = module.lower_to_vcode::<X64Instruction, X64Selector>();
-            fs::write("result/output.asm", format!("{}", vcode)).unwrap();
+            fs::write(&cli.output, format!("{}", vcode)).unwrap();
+        }
+        "codegem-ir" => {
+            fs::write(&cli.output, format!("{}", module)).unwrap();
         }
         _ => bail!(miette!(
             "Unknown target, choose from ['rv64', 'urcl', 'x64']"
@@ -53,8 +54,9 @@ fn main() -> miette::Result<()> {
 
 #[derive(Debug, Parser)]
 struct Cli {
-    #[clap(short, long)]
     file: PathBuf,
-    #[clap(long, default_value = "rv64")]
+    #[clap(long, default_value = "x64")]
     target: String,
+    #[clap(short, long)]
+    output: PathBuf,
 }

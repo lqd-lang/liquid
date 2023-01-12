@@ -81,7 +81,6 @@ impl<'a> Compiler<'a> {
         node: &ASTNode<NodeValue>,
     ) -> Result<Option<Value>> {
         match node.node {
-            NodeValue::NULL => todo!(),
             NodeValue::Id => {
                 let id = &self.input[node.start..node.end];
                 let (type_, var_id) = if let Some(thing) = self.vars.get(id) {
@@ -98,10 +97,6 @@ impl<'a> Compiler<'a> {
                     Operation::Integer(true, num.to_le_bytes().to_vec()),
                 ))
             }
-            NodeValue::Add => todo!(),
-            NodeValue::Sub => todo!(),
-            NodeValue::Mul => todo!(),
-            NodeValue::Div => todo!(),
             NodeValue::Product => {
                 if node.children.len() == 1 {
                     // Just a number
@@ -173,7 +168,6 @@ impl<'a> Compiler<'a> {
                 }
                 Ok(None)
             }
-            NodeValue::Root => todo!(),
             NodeValue::VarAssign => {
                 let id = &node.children[0];
                 let id = &self.input[id.start..id.end];
@@ -184,6 +178,14 @@ impl<'a> Compiler<'a> {
                 let result = builder.push_instruction(&type_, Operation::SetVar(var_id, value_imm));
                 self.vars.insert(id, (type_, var_id));
                 Ok(result)
+            }
+            NodeValue::Add
+            | NodeValue::Sub
+            | NodeValue::Mul
+            | NodeValue::Div
+            | NodeValue::NULL
+            | NodeValue::Root => {
+                unreachable!()
             }
         }
     }
