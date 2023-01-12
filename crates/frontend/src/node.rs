@@ -23,6 +23,7 @@ pub enum NodeValue {
     Root,
     VarAssign,
     FnDef,
+    FnCall,
 }
 
 impl NodeImpl for NodeValue {
@@ -56,22 +57,28 @@ pub fn parser() -> DefaultParser<NodeValue, Token> {
     let product_node = Rc::new(Node::new(&product, NodeValue::Product));
     let sum = Rc::new(SeparatedList::new(&product_node, &add_ops, true));
     let sum_node = Rc::new(Node::new(&sum, NodeValue::Sum));
-    let let_ = Rc::new(Concat::new(
-        "let",
+    let fn_call = Rc::new(Concat::new(
+        "call",
         vec![
-            Rc::new(TokenField::new(Token::Let, None)),
             identifier.clone(),
-            Rc::new(TokenField::new(Token::Assign, None)),
-            sum_node.clone(),
+            Rc::new(TokenField::new(Token::OpenParen, None)),
+            Rc::new(TokenField::new(Token::CloseParen, None)),
         ],
     ));
+    let fn_call_node = Rc::new(Node::new(&fn_call, NodeValue::FnCall));
+    let let_ = Rc::new(Concat::init("let"));
     let let_node = Rc::new(Node::new(&let_, NodeValue::VarAssign));
     let fn_def = Rc::new(Concat::init("fn_def"));
     let fn_def_node = Rc::new(Node::new(&fn_def, NodeValue::FnDef));
     let semicolon = Rc::new(TokenField::new(Token::Semicolon, None));
     let expression = Rc::new(Union::new(
         "expression",
-        vec![let_node.clone(), fn_def_node.clone(), sum_node.clone()],
+        vec![
+            fn_call_node.clone(),
+            let_node.clone(),
+            fn_def_node.clone(),
+            sum_node.clone(),
+        ],
     ));
     let expr_node = Rc::new(Node::new(&expression, NodeValue::Expr));
     let exprs = Rc::new(SeparatedList::new(&expr_node, &semicolon, true));
@@ -95,6 +102,13 @@ pub fn parser() -> DefaultParser<NodeValue, Token> {
             Rc::new(TokenField::new(Token::CloseBrace, None)),
         ])
         .unwrap();
+    let_.set_symbols(vec![
+        Rc::new(TokenField::new(Token::Let, None)),
+        identifier.clone(),
+        Rc::new(TokenField::new(Token::Assign, None)),
+        expr_node.clone(),
+    ])
+    .unwrap();
 
     let parser = DefaultParser::new(Rc::new(token::tokenizer()), root_node).unwrap();
     parser

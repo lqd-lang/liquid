@@ -20,6 +20,7 @@ pub struct Compiler<'a> {
     main_function_entry_block: Option<BasicBlockId>,
     types: Types<'a>,
     vars: HashMap<&'a str, (Type, VariableId)>,
+    functions: HashMap<&'a str, (Type, FunctionId)>,
 }
 
 #[derive(Default)]
@@ -45,6 +46,7 @@ impl<'a> Compiler<'a> {
             main_function_entry_block: None,
             types: Types::default(),
             vars: HashMap::new(),
+            functions: HashMap::new(),
         }
     }
 
@@ -163,10 +165,11 @@ impl<'a> Compiler<'a> {
                 }
             }
             NodeValue::Expr => {
+                let mut result = None;
                 for child in &node.children {
-                    self.compile_node(builder, child)?;
+                    result = self.compile_node(builder, child)?;
                 }
-                Ok(None)
+                Ok(result)
             }
             NodeValue::VarAssign => {
                 let id = &node.children[0];
@@ -198,6 +201,8 @@ impl<'a> Compiler<'a> {
                 let block_id = builder.push_block().unwrap();
                 builder.switch_to_block(block_id);
 
+                self.functions.insert(id, (ret_type.clone(), func_id));
+
                 while let Some(node) = iter.next() {
                     self.compile_node(builder, node)?;
                 }
@@ -207,6 +212,16 @@ impl<'a> Compiler<'a> {
                 builder.switch_to_block(self.main_function_entry_block.unwrap());
 
                 Ok(None)
+            }
+            NodeValue::FnCall => {
+                let id = &node.children[0];
+                let id = &self.input[id.start..id.end];
+
+                let (type_, function_id) = self
+                    .functions
+                    .get(id)
+                    .ok_or_else(|| miette!("Unknown function"))?;
+                Ok(builder.push_instruction(type_, Operation::Call(*function_id, vec![])))
             }
             NodeValue::Add
             | NodeValue::Sub
@@ -225,10 +240,14 @@ impl<'a> Compiler<'a> {
             // Type of left hand side
             NodeValue::Sum => self.type_of(&node.children[0]),
             NodeValue::Product => self.type_of(&node.children[0]),
+            NodeValue::Expr => self.type_of(node.children.last().unwrap()),
             // Retrieve from variable list
             // It can be unwrapped, because it will already have been compiled, thus already checked
             NodeValue::Id => &self.vars.get(&self.input[node.start..node.end]).unwrap().0,
-            _ => &Type::Void,
+            a => {
+                println!("{a:?} returned Void");
+                &Type::Void
+            }
         }
     }
 }
