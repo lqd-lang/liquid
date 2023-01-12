@@ -33,7 +33,9 @@ pub enum Token {
     False,
     Let,
     Null,
+    Fn,
     Undefined,
+    TypeArrow,
 }
 
 impl TokenImpl for Token {
@@ -63,6 +65,7 @@ pub fn tokenizer() -> Tokenizer<Token> {
             ("null", Token::Null),
             ("undefined", Token::Undefined),
             ("let", Token::Let),
+            ("fn", Token::Fn),
         ],
     )
     .unwrap();
@@ -88,6 +91,7 @@ pub fn tokenizer() -> Tokenizer<Token> {
         ("[", Token::OpenBracket),
         ("]", Token::CloseBracket),
         (";", Token::Semicolon),
+        ("->", Token::TypeArrow),
     ])
     .unwrap();
 

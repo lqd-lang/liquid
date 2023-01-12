@@ -11,7 +11,7 @@ use frontend::{node::NodeValue, parser};
 
 lazy_static! {
     static ref GLOBAL_TYPES: HashMap<&'static str, Type> =
-        HashMap::from([("int", Type::Integer(true, 64))]);
+        HashMap::from([("int", Type::Integer(true, 64)), ("void", Type::Void)]);
 }
 
 pub struct Compiler<'a> {
@@ -178,6 +178,35 @@ impl<'a> Compiler<'a> {
                 let result = builder.push_instruction(&type_, Operation::SetVar(var_id, value_imm));
                 self.vars.insert(id, (type_, var_id));
                 Ok(result)
+            }
+            NodeValue::FnDef => {
+                let mut iter = node.children.iter();
+
+                let id = iter.next().unwrap();
+                let id = &self.input[id.start..id.end];
+
+                let ret_type = iter.next().unwrap();
+                let ret_type = &self.input[ret_type.start..ret_type.end];
+                let ret_type = self
+                    .types
+                    .get(ret_type)
+                    .ok_or_else(|| miette!("Invalid type"))?;
+
+                // create function
+                let func_id = builder.new_function(id, &[], ret_type);
+                builder.switch_to_function(func_id);
+                let block_id = builder.push_block().unwrap();
+                builder.switch_to_block(block_id);
+
+                while let Some(node) = iter.next() {
+                    self.compile_node(builder, node)?;
+                }
+
+                // switch back to main function
+                builder.switch_to_function(self.main_function.unwrap());
+                builder.switch_to_block(self.main_function_entry_block.unwrap());
+
+                Ok(None)
             }
             NodeValue::Add
             | NodeValue::Sub

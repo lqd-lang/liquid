@@ -24,12 +24,8 @@ fn main() -> miette::Result<()> {
 
     let module = builder.build();
 
-    if !PathBuf::from("result").exists() {
-        fs::create_dir_all("result").unwrap();
-    }
-
     match cli.target.as_str() {
-        "rv64" => {
+        "rv64" | "riscv64" => {
             let vcode = module.lower_to_vcode::<RvInstruction, RvSelector>();
             fs::write(&cli.output, format!("{}", vcode)).unwrap();
         }
@@ -45,7 +41,7 @@ fn main() -> miette::Result<()> {
             fs::write(&cli.output, format!("{}", module)).unwrap();
         }
         _ => bail!(miette!(
-            "Unknown target, choose from ['rv64', 'urcl', 'x64']"
+            "Unknown target, choose from ['riscv64', 'urcl', 'x64', 'codegem-ir']"
         )),
     }
 
@@ -54,9 +50,14 @@ fn main() -> miette::Result<()> {
 
 #[derive(Debug, Parser)]
 struct Cli {
+    /// Input file
     file: PathBuf,
+    /// What target you are compiling for
+    ///
+    /// Eg. ['risv64', 'urcl', 'x64', 'codegem-ir']
     #[clap(long, default_value = "x64")]
     target: String,
+    /// Where to put the result?
     #[clap(short, long)]
     output: PathBuf,
 }

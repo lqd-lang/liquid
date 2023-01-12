@@ -22,6 +22,7 @@ pub enum NodeValue {
     Expr,
     Root,
     VarAssign,
+    FnDef,
 }
 
 impl NodeImpl for NodeValue {
@@ -65,13 +66,15 @@ pub fn parser() -> DefaultParser<NodeValue, Token> {
         ],
     ));
     let let_node = Rc::new(Node::new(&let_, NodeValue::VarAssign));
+    let fn_def = Rc::new(Concat::init("fn_def"));
+    let fn_def_node = Rc::new(Node::new(&fn_def, NodeValue::FnDef));
     let semicolon = Rc::new(TokenField::new(Token::Semicolon, None));
     let expression = Rc::new(Union::new(
         "expression",
-        vec![let_node.clone(), sum_node.clone()],
+        vec![let_node.clone(), fn_def_node.clone(), sum_node.clone()],
     ));
     let expr_node = Rc::new(Node::new(&expression, NodeValue::Expr));
-    let exprs = Rc::new(SeparatedList::new(&expr_node, &semicolon, false));
+    let exprs = Rc::new(SeparatedList::new(&expr_node, &semicolon, true));
     let root = Rc::new(Concat::new("root", vec![exprs.clone(), end_of_file]));
     let root_node = Rc::new(Node::new(&root, NodeValue::Root));
 
@@ -79,6 +82,18 @@ pub fn parser() -> DefaultParser<NodeValue, Token> {
     let close_paren = Rc::new(TokenField::new(Token::CloseParen, None));
     paren_expr
         .set_symbols(vec![open_paren, sum.clone(), close_paren])
+        .unwrap();
+
+    fn_def
+        .set_symbols(vec![
+            Rc::new(TokenField::new(Token::Fn, None)),
+            identifier.clone(),
+            Rc::new(TokenField::new(Token::TypeArrow, None)),
+            identifier.clone(),
+            Rc::new(TokenField::new(Token::OpenBrace, None)),
+            exprs.clone(),
+            Rc::new(TokenField::new(Token::CloseBrace, None)),
+        ])
         .unwrap();
 
     let parser = DefaultParser::new(Rc::new(token::tokenizer()), root_node).unwrap();
