@@ -139,27 +139,33 @@ impl<'a> Compiler<'a> {
                 }
             }
             NodeValue::Sum => {
-                let mut iter = node.children.iter();
+                if node.children.len() == 1 {
+                    self.compile_node(builder, node.children.first().unwrap())
+                } else if node.children.len() % 2 == 1 {
+                    let mut iter = node.children.iter();
 
-                while let Some(node) = iter.next() {
-                    let lhs = node;
-                    let op = iter.next().unwrap();
-                    let rhs = iter.next().unwrap();
-                    let lhs_imm = self.compile_node(builder, lhs)?.unwrap();
-                    let rhs_imm = self.compile_node(builder, rhs)?.unwrap();
-                    let lhs_type = self.type_of(lhs);
-                    match op.node {
-                        NodeValue::Add => {
-                            builder.push_instruction(lhs_type, Operation::Add(lhs_imm, rhs_imm))
-                        }
-                        NodeValue::Sub => {
-                            builder.push_instruction(lhs_type, Operation::Sub(lhs_imm, rhs_imm))
-                        }
-                        _ => unreachable!(),
-                    };
+                    while let Some(node) = iter.next() {
+                        let lhs = node;
+                        let op = iter.next().unwrap();
+                        let rhs = iter.next().unwrap();
+                        let lhs_imm = self.compile_node(builder, lhs)?.unwrap();
+                        let rhs_imm = self.compile_node(builder, rhs)?.unwrap();
+                        let lhs_type = self.type_of(lhs);
+                        match op.node {
+                            NodeValue::Add => {
+                                builder.push_instruction(lhs_type, Operation::Add(lhs_imm, rhs_imm))
+                            }
+                            NodeValue::Sub => {
+                                builder.push_instruction(lhs_type, Operation::Sub(lhs_imm, rhs_imm))
+                            }
+                            _ => unreachable!(),
+                        };
+                    }
+
+                    Ok(None)
+                } else {
+                    unreachable!()
                 }
-
-                Ok(None)
             }
             NodeValue::Expr => {
                 for child in &node.children {
@@ -168,12 +174,29 @@ impl<'a> Compiler<'a> {
                 Ok(None)
             }
             NodeValue::Root => todo!(),
+            NodeValue::VarAssign => {
+                let id = &node.children[0];
+                let id = &self.input[id.start..id.end];
+                let value = &node.children[1];
+                let value_imm = self.compile_node(builder, value)?.unwrap();
+                let type_ = self.type_of(value).clone();
+                let var_id = builder.push_variable(id, &type_).unwrap();
+                let result = builder.push_instruction(&type_, Operation::SetVar(var_id, value_imm));
+                self.vars.insert(id, (type_, var_id));
+                Ok(result)
+            }
         }
     }
 
     fn type_of(&self, node: &ASTNode<NodeValue>) -> &Type {
         match node.node {
             NodeValue::Number => self.types.get("int").unwrap(),
+            // Type of left hand side
+            NodeValue::Sum => self.type_of(&node.children[0]),
+            NodeValue::Product => self.type_of(&node.children[0]),
+            // Retrieve from variable list
+            // It can be unwrapped, because it will already have been compiled, thus already checked
+            NodeValue::Id => &self.vars.get(&self.input[node.start..node.end]).unwrap().0,
             _ => &Type::Void,
         }
     }

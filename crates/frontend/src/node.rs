@@ -21,6 +21,7 @@ pub enum NodeValue {
     Sum,
     Expr,
     Root,
+    VarAssign,
 }
 
 impl NodeImpl for NodeValue {
@@ -47,17 +48,31 @@ pub fn parser() -> DefaultParser<NodeValue, Token> {
 
     let value = Rc::new(Union::new(
         "value",
-        vec![number, identifier, paren_expr.clone()],
+        vec![number, identifier.clone(), paren_expr.clone()],
     ));
 
     let product = Rc::new(SeparatedList::new(&value, &mul_ops, true));
     let product_node = Rc::new(Node::new(&product, NodeValue::Product));
     let sum = Rc::new(SeparatedList::new(&product_node, &add_ops, true));
     let sum_node = Rc::new(Node::new(&sum, NodeValue::Sum));
+    let let_ = Rc::new(Concat::new(
+        "let",
+        vec![
+            Rc::new(TokenField::new(Token::Let, None)),
+            identifier.clone(),
+            Rc::new(TokenField::new(Token::Assign, None)),
+            sum_node.clone(),
+        ],
+    ));
+    let let_node = Rc::new(Node::new(&let_, NodeValue::VarAssign));
     let semicolon = Rc::new(TokenField::new(Token::Semicolon, None));
-    let expression = Rc::new(Concat::new("expression", vec![sum_node.clone(), semicolon]));
+    let expression = Rc::new(Union::new(
+        "expression",
+        vec![let_node.clone(), sum_node.clone()],
+    ));
     let expr_node = Rc::new(Node::new(&expression, NodeValue::Expr));
-    let root = Rc::new(Concat::new("root", vec![expr_node.clone(), end_of_file]));
+    let exprs = Rc::new(SeparatedList::new(&expr_node, &semicolon, false));
+    let root = Rc::new(Concat::new("root", vec![exprs.clone(), end_of_file]));
     let root_node = Rc::new(Node::new(&root, NodeValue::Root));
 
     let open_paren = Rc::new(TokenField::new(Token::OpenParen, None));

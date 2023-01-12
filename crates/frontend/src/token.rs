@@ -31,6 +31,7 @@ pub enum Token {
     For,
     True,
     False,
+    Let,
     Null,
     Undefined,
 }
@@ -61,6 +62,7 @@ pub fn tokenizer() -> Tokenizer<Token> {
             ("false", Token::False),
             ("null", Token::Null),
             ("undefined", Token::Undefined),
+            ("let", Token::Let),
         ],
     )
     .unwrap();
