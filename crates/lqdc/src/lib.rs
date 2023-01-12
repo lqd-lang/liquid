@@ -1,0 +1,180 @@
+#[macro_use]
+extern crate lazy_static;
+
+use std::collections::HashMap;
+
+use codegem::ir::{BasicBlockId, FunctionId, ModuleBuilder, Operation, Type, Value, VariableId};
+use lang_pt::ASTNode;
+use miette::{bail, miette, Result};
+
+use frontend::{node::NodeValue, parser};
+
+lazy_static! {
+    static ref GLOBAL_TYPES: HashMap<&'static str, Type> =
+        HashMap::from([("int", Type::Integer(true, 64))]);
+}
+
+pub struct Compiler<'a> {
+    input: &'a str,
+    main_function: Option<FunctionId>,
+    main_function_entry_block: Option<BasicBlockId>,
+    types: Types<'a>,
+    vars: HashMap<&'a str, (Type, VariableId)>,
+}
+
+#[derive(Default)]
+struct Types<'a> {
+    inner: HashMap<&'a str, Type>,
+}
+
+impl Types<'_> {
+    fn get(&self, key: &str) -> Option<&Type> {
+        let res = self.inner.get(key);
+        if res.is_none() {
+            return GLOBAL_TYPES.get(key);
+        }
+        res
+    }
+}
+
+impl<'a> Compiler<'a> {
+    pub fn new(input: &'a str) -> Self {
+        Self {
+            input,
+            main_function: None,
+            main_function_entry_block: None,
+            types: Types::default(),
+            vars: HashMap::new(),
+        }
+    }
+
+    pub fn compile(&mut self, builder: &mut ModuleBuilder) -> Result<()> {
+        let parser = parser();
+        // TODO: Better error handling
+        let parsed = parser.parse(self.input.as_bytes()).unwrap();
+
+        self.main_function = Some(builder.new_function("__lqd_main__", &[], &Type::Void));
+        builder.switch_to_function(self.main_function.unwrap());
+
+        self.main_function_entry_block = builder.push_block();
+        builder.switch_to_block(self.main_function_entry_block.unwrap());
+
+        if parsed.len() != 1 {
+            bail!(miette!("Failed to parse"))
+        }
+
+        let root = parsed.first().unwrap();
+        if root.node != NodeValue::Root {
+            bail!(miette!("Not root"))
+        }
+
+        for child in &root.children {
+            self.compile_node(builder, child)?;
+        }
+
+        Ok(())
+    }
+
+    fn compile_node(
+        &mut self,
+        builder: &mut ModuleBuilder,
+        node: &ASTNode<NodeValue>,
+    ) -> Result<Option<Value>> {
+        match node.node {
+            NodeValue::NULL => todo!(),
+            NodeValue::Id => {
+                let id = &self.input[node.start..node.end];
+                let (type_, var_id) = if let Some(thing) = self.vars.get(id) {
+                    thing
+                } else {
+                    bail!(miette!("Variable '{}' does not exist", id))
+                };
+                Ok(builder.push_instruction(type_, Operation::GetVar(*var_id)))
+            }
+            NodeValue::Number => {
+                let num = self.input[node.start..node.end].parse::<i64>().unwrap();
+                Ok(builder.push_instruction(
+                    self.types.get("int").unwrap(),
+                    Operation::Integer(true, num.to_le_bytes().to_vec()),
+                ))
+            }
+            NodeValue::Add => todo!(),
+            NodeValue::Sub => todo!(),
+            NodeValue::Mul => todo!(),
+            NodeValue::Div => todo!(),
+            NodeValue::Product => {
+                if node.children.len() == 1 {
+                    // Just a number
+                    self.compile_node(builder, node.children.first().unwrap())
+                } else if node.children.len() % 2 == 1 {
+                    // dbg!(node.children.len());
+                    let mut iter = node.children.iter();
+
+                    let lhs = iter.next().unwrap();
+                    let mut lhs_imm = self.compile_node(builder, lhs)?.unwrap();
+                    while let Some(op) = iter.next() {
+                        let rhs = iter.next().unwrap();
+
+                        // let lhs_imm = self.compile_node(builder, lhs)?.unwrap();
+                        let rhs_imm = self.compile_node(builder, rhs)?.unwrap();
+                        lhs_imm = match op.node {
+                            NodeValue::Mul => builder
+                                .push_instruction(
+                                    self.type_of(lhs),
+                                    Operation::Mul(lhs_imm, rhs_imm),
+                                )
+                                .unwrap(),
+                            NodeValue::Div => builder
+                                .push_instruction(
+                                    self.type_of(lhs),
+                                    Operation::Div(lhs_imm, rhs_imm),
+                                )
+                                .unwrap(),
+                            _ => unreachable!(),
+                        };
+                    }
+                    Ok(Some(lhs_imm))
+                } else {
+                    bail!(miette!("Even number of arguments"))
+                }
+            }
+            NodeValue::Sum => {
+                let mut iter = node.children.iter();
+
+                while let Some(node) = iter.next() {
+                    let lhs = node;
+                    let op = iter.next().unwrap();
+                    let rhs = iter.next().unwrap();
+                    let lhs_imm = self.compile_node(builder, lhs)?.unwrap();
+                    let rhs_imm = self.compile_node(builder, rhs)?.unwrap();
+                    let lhs_type = self.type_of(lhs);
+                    match op.node {
+                        NodeValue::Add => {
+                            builder.push_instruction(lhs_type, Operation::Add(lhs_imm, rhs_imm))
+                        }
+                        NodeValue::Sub => {
+                            builder.push_instruction(lhs_type, Operation::Sub(lhs_imm, rhs_imm))
+                        }
+                        _ => unreachable!(),
+                    };
+                }
+
+                Ok(None)
+            }
+            NodeValue::Expr => {
+                for child in &node.children {
+                    self.compile_node(builder, child)?;
+                }
+                Ok(None)
+            }
+            NodeValue::Root => todo!(),
+        }
+    }
+
+    fn type_of(&self, node: &ASTNode<NodeValue>) -> &Type {
+        match node.node {
+            NodeValue::Number => self.types.get("int").unwrap(),
+            _ => &Type::Void,
+        }
+    }
+}

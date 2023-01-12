@@ -1,4 +1,5 @@
 target/
 result/
+.vscode/
 # For testing
 example.lqd

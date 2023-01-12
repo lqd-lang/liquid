@@ -10,26 +10,20 @@ use codegem::{
     },
     ir::ModuleBuilder,
 };
-use frontend::{top::Top, Context, LowerToCodegem, Parse};
+use lqdc::Compiler;
 use miette::{bail, miette};
 
 fn main() -> miette::Result<()> {
     let cli = Cli::parse();
     let input = fs::read_to_string(&cli.file).expect("File does not exist");
 
-    let top = Top::parse(&input).unwrap().1;
-    let mut builder = ModuleBuilder::default().with_name(
-        cli.file
-            .with_extension("")
-            .file_name()
-            .unwrap()
-            .to_str()
-            .unwrap(),
-    );
-    let mut context = Context::default();
-    top.lower_to_code_gem(&mut builder, &mut context)?;
-    // println!("{:#?}", top);
+    let name = cli.file.with_extension("");
+    let mut builder = ModuleBuilder::default().with_name(name.to_str().unwrap());
+    let mut compiler = Compiler::new(&input);
+    compiler.compile(&mut builder)?;
+
     let module = builder.build();
+
     println!("{}", module);
 
     if !PathBuf::from("result").exists() {
