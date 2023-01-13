@@ -1,17 +1,27 @@
 #[macro_use]
 extern crate lazy_static;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 use codegem::ir::{BasicBlockId, FunctionId, ModuleBuilder, Operation, Type, Value, VariableId};
 use lang_pt::ASTNode;
-use miette::{bail, miette, Result};
+use miette::{bail, miette, Diagnostic, Result, SourceSpan};
 
 use frontend::{node::NodeValue, parser};
+use thiserror::Error;
 
 lazy_static! {
     static ref GLOBAL_TYPES: HashMap<&'static str, Type> =
         HashMap::from([("int", Type::Integer(true, 64)), ("void", Type::Void)]);
+}
+
+#[derive(Error, Diagnostic, Debug)]
+pub enum Error {
+    #[error("Variable {} does not exist", .0)]
+    VarDoesntExist(String, #[label("here")] SourceSpan, #[source_code] String),
+    #[error("{}", .0)]
+    #[diagnostic()]
+    ParseError(String, #[label("here")] SourceSpan, #[source_code] String),
 }
 
 pub struct Compiler<'a> {
@@ -53,7 +63,16 @@ impl<'a> Compiler<'a> {
     pub fn compile(&mut self, builder: &mut ModuleBuilder) -> Result<()> {
         let parser = parser();
         // TODO: Better error handling
-        let parsed = parser.parse(self.input.as_bytes()).unwrap();
+        let parsed: Vec<ASTNode<NodeValue>> = match parser.parse(self.input.as_bytes()) {
+            Ok(parsed) => parsed,
+            Err(parse_error) => {
+                bail!(Error::ParseError(
+                    parse_error.message,
+                    parse_error.pointer.into(),
+                    self.input.to_string()
+                ));
+            }
+        };
 
         self.main_function = Some(builder.new_function("__lqd_main__", &[], &Type::Void));
         builder.switch_to_function(self.main_function.unwrap());
@@ -70,8 +89,20 @@ impl<'a> Compiler<'a> {
             bail!(miette!("Not root"))
         }
 
+        let mut compile_queue = VecDeque::new();
         for child in &root.children {
-            self.compile_node(builder, child)?;
+            self.compile_node(builder, child, &mut compile_queue)?;
+        }
+
+        // Work on queue
+        while !compile_queue.is_empty() {
+            let (func_id, block_id, nodes) = compile_queue.pop_front().unwrap();
+            builder.switch_to_function(func_id);
+            builder.switch_to_block(block_id);
+
+            for node in nodes {
+                self.compile_node(builder, &node, &mut compile_queue)?;
+            }
         }
 
         Ok(())
@@ -81,6 +112,7 @@ impl<'a> Compiler<'a> {
         &mut self,
         builder: &mut ModuleBuilder,
         node: &ASTNode<NodeValue>,
+        compile_queue: &mut VecDeque<(FunctionId, BasicBlockId, Vec<ASTNode<NodeValue>>)>,
     ) -> Result<Option<Value>> {
         match node.node {
             NodeValue::Id => {
@@ -88,7 +120,12 @@ impl<'a> Compiler<'a> {
                 let (type_, var_id) = if let Some(thing) = self.vars.get(id) {
                     thing
                 } else {
-                    bail!(miette!("Variable '{}' does not exist", id))
+                    // bail!(miette!("Variable '{}' does not exist", id))
+                    bail!(Error::VarDoesntExist(
+                        id.to_string(),
+                        (node.start..node.end).into(),
+                        self.input.to_string()
+                    ))
                 };
                 Ok(builder.push_instruction(type_, Operation::GetVar(*var_id)))
             }
@@ -102,18 +139,18 @@ impl<'a> Compiler<'a> {
             NodeValue::Product => {
                 if node.children.len() == 1 {
                     // Just a number
-                    self.compile_node(builder, node.children.first().unwrap())
+                    self.compile_node(builder, node.children.first().unwrap(), compile_queue)
                 } else if node.children.len() % 2 == 1 {
                     // dbg!(node.children.len());
                     let mut iter = node.children.iter();
 
                     let lhs = iter.next().unwrap();
-                    let mut lhs_imm = self.compile_node(builder, lhs)?.unwrap();
+                    let mut lhs_imm = self.compile_node(builder, lhs, compile_queue)?.unwrap();
                     while let Some(op) = iter.next() {
                         let rhs = iter.next().unwrap();
 
                         // let lhs_imm = self.compile_node(builder, lhs)?.unwrap();
-                        let rhs_imm = self.compile_node(builder, rhs)?.unwrap();
+                        let rhs_imm = self.compile_node(builder, rhs, compile_queue)?.unwrap();
                         lhs_imm = match op.node {
                             NodeValue::Mul => builder
                                 .push_instruction(
@@ -137,29 +174,29 @@ impl<'a> Compiler<'a> {
             }
             NodeValue::Sum => {
                 if node.children.len() == 1 {
-                    self.compile_node(builder, node.children.first().unwrap())
+                    self.compile_node(builder, node.children.first().unwrap(), compile_queue)
                 } else if node.children.len() % 2 == 1 {
                     let mut iter = node.children.iter();
 
+                    let mut result = None;
                     while let Some(node) = iter.next() {
                         let lhs = node;
                         let op = iter.next().unwrap();
                         let rhs = iter.next().unwrap();
-                        let lhs_imm = self.compile_node(builder, lhs)?.unwrap();
-                        let rhs_imm = self.compile_node(builder, rhs)?.unwrap();
+                        let lhs_imm = self.compile_node(builder, lhs, compile_queue)?.unwrap();
+                        let rhs_imm = self.compile_node(builder, rhs, compile_queue)?.unwrap();
                         let lhs_type = self.type_of(lhs);
-                        match op.node {
-                            NodeValue::Add => {
-                                builder.push_instruction(lhs_type, Operation::Add(lhs_imm, rhs_imm))
-                            }
-                            NodeValue::Sub => {
-                                builder.push_instruction(lhs_type, Operation::Sub(lhs_imm, rhs_imm))
-                            }
-                            _ => unreachable!(),
-                        };
+                        result =
+                            match op.node {
+                                NodeValue::Add => builder
+                                    .push_instruction(lhs_type, Operation::Add(lhs_imm, rhs_imm)),
+                                NodeValue::Sub => builder
+                                    .push_instruction(lhs_type, Operation::Sub(lhs_imm, rhs_imm)),
+                                _ => unreachable!(),
+                            };
                     }
 
-                    Ok(None)
+                    Ok(result)
                 } else {
                     unreachable!()
                 }
@@ -167,7 +204,7 @@ impl<'a> Compiler<'a> {
             NodeValue::Expr => {
                 let mut result = None;
                 for child in &node.children {
-                    result = self.compile_node(builder, child)?;
+                    result = self.compile_node(builder, child, compile_queue)?;
                 }
                 Ok(result)
             }
@@ -175,7 +212,7 @@ impl<'a> Compiler<'a> {
                 let id = &node.children[0];
                 let id = &self.input[id.start..id.end];
                 let value = &node.children[1];
-                let value_imm = self.compile_node(builder, value)?.unwrap();
+                let value_imm = self.compile_node(builder, value, compile_queue)?.unwrap();
                 let type_ = self.type_of(value).clone();
                 let var_id = builder.push_variable(id, &type_).unwrap();
                 let result = builder.push_instruction(&type_, Operation::SetVar(var_id, value_imm));
@@ -203,9 +240,16 @@ impl<'a> Compiler<'a> {
 
                 self.functions.insert(id, (ret_type.clone(), func_id));
 
-                while let Some(node) = iter.next() {
-                    self.compile_node(builder, node)?;
-                }
+                // Add to compile queue
+                compile_queue.push_back((
+                    func_id,
+                    block_id,
+                    node.children[2..node.children.len()].to_vec(),
+                ));
+
+                // while let Some(node) = iter.next() {
+                //     self.compile_node(builder, node)?;
+                // }
 
                 // switch back to main function
                 builder.switch_to_function(self.main_function.unwrap());
