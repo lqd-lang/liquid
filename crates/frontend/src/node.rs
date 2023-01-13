@@ -48,10 +48,7 @@ pub fn parser() -> DefaultParser<NodeValue, Token> {
 
     let paren_expr = Rc::new(Concat::init("paren_expr"));
 
-    let value = Rc::new(Union::new(
-        "value",
-        vec![number, identifier.clone(), paren_expr.clone()],
-    ));
+    let value = Rc::new(Union::init("value"));
 
     let product = Rc::new(SeparatedList::new(&value, &mul_ops, true));
     let product_node = Rc::new(Node::new(&product, NodeValue::Product));
@@ -109,6 +106,14 @@ pub fn parser() -> DefaultParser<NodeValue, Token> {
         expr_node.clone(),
     ])
     .unwrap();
+    value
+        .set_symbols(vec![
+            fn_call_node.clone(),
+            number,
+            identifier.clone(),
+            paren_expr.clone(),
+        ])
+        .unwrap();
 
     let parser = DefaultParser::new(Rc::new(token::tokenizer()), root_node).unwrap();
     parser
