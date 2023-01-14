@@ -5,7 +5,7 @@ use std::collections::{HashMap, VecDeque};
 
 use codegem::ir::{BasicBlockId, FunctionId, ModuleBuilder, Operation, Type, Value, VariableId};
 use lang_pt::ASTNode;
-use miette::{bail, miette, Diagnostic, Result, SourceSpan};
+use miette::{bail, ensure, miette, Diagnostic, Result, SourceSpan};
 
 use frontend::{node::NodeValue, parser};
 use thiserror::Error;
@@ -104,6 +104,22 @@ impl<'a> Compiler<'a> {
                 self.compile_node(builder, &node, &mut compile_queue)?;
             }
         }
+
+        builder.switch_to_function(self.main_function.unwrap());
+        builder.switch_to_block(self.main_function_entry_block.unwrap());
+
+        // Call main function
+        ensure!(self.functions.contains_key("main"), "No main function");
+        let main_function = self.functions.get("main").unwrap();
+        ensure!(
+            match main_function.0 {
+                Type::Void => true,
+                _ => false,
+            },
+            "Main function must return void"
+        );
+
+        builder.push_instruction(&Type::Void, Operation::Call(main_function.1, vec![]));
 
         Ok(())
     }

@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use lang_pt::{
-    production::{Concat, EOFProd, Node, SeparatedList, TokenField, TokenFieldSet, Union},
+    production::{Concat, EOFProd, List, Node, SeparatedList, TokenField, TokenFieldSet, Union},
     DefaultParser, NodeImpl,
 };
 
@@ -79,7 +79,10 @@ pub fn parser() -> DefaultParser<NodeValue, Token> {
     ));
     let expr_node = Rc::new(Node::new(&expression, NodeValue::Expr));
     let exprs = Rc::new(SeparatedList::new(&expr_node, &semicolon, true));
-    let root = Rc::new(Concat::new("root", vec![exprs.clone(), end_of_file]));
+    let root = Rc::new(Concat::new(
+        "root",
+        vec![Rc::new(List::new(&fn_def_node)), end_of_file],
+    ));
     let root_node = Rc::new(Node::new(&root, NodeValue::Root));
 
     let open_paren = Rc::new(TokenField::new(Token::OpenParen, None));
