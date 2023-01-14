@@ -16,6 +16,8 @@ pub enum Token {
     Div,
     Space,
     Semicolon,
+    Colon,
+    Comma,
     LineBreak,
     Assign,
     EOF,
@@ -92,6 +94,8 @@ pub fn tokenizer() -> Tokenizer<Token> {
         ("]", Token::CloseBracket),
         (";", Token::Semicolon),
         ("->", Token::TypeArrow),
+        (":", Token::Colon),
+        (",", Token::Comma),
     ])
     .unwrap();
 

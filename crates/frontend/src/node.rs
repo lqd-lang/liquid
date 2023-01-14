@@ -1,7 +1,9 @@
 use std::rc::Rc;
 
 use lang_pt::{
-    production::{Concat, EOFProd, List, Node, SeparatedList, TokenField, TokenFieldSet, Union},
+    production::{
+        Concat, EOFProd, List, Node, Nullable, SeparatedList, TokenField, TokenFieldSet, Union,
+    },
     DefaultParser, NodeImpl,
 };
 
@@ -24,6 +26,8 @@ pub enum NodeValue {
     VarAssign,
     FnDef,
     FnCall,
+    FnDefArgSet,
+    FnCallArgSet,
 }
 
 impl NodeImpl for NodeValue {
@@ -54,14 +58,7 @@ pub fn parser() -> DefaultParser<NodeValue, Token> {
     let product_node = Rc::new(Node::new(&product, NodeValue::Product));
     let sum = Rc::new(SeparatedList::new(&product_node, &add_ops, true));
     let sum_node = Rc::new(Node::new(&sum, NodeValue::Sum));
-    let fn_call = Rc::new(Concat::new(
-        "call",
-        vec![
-            identifier.clone(),
-            Rc::new(TokenField::new(Token::OpenParen, None)),
-            Rc::new(TokenField::new(Token::CloseParen, None)),
-        ],
-    ));
+    let fn_call = Rc::new(Concat::init("call"));
     let fn_call_node = Rc::new(Node::new(&fn_call, NodeValue::FnCall));
     let let_ = Rc::new(Concat::init("let"));
     let let_node = Rc::new(Node::new(&let_, NodeValue::VarAssign));
@@ -88,18 +85,48 @@ pub fn parser() -> DefaultParser<NodeValue, Token> {
     let open_paren = Rc::new(TokenField::new(Token::OpenParen, None));
     let close_paren = Rc::new(TokenField::new(Token::CloseParen, None));
     paren_expr
-        .set_symbols(vec![open_paren, sum.clone(), close_paren])
+        .set_symbols(vec![open_paren.clone(), sum.clone(), close_paren.clone()])
         .unwrap();
 
+    let typed_identifier = Rc::new(Concat::new(
+        "typed_identifier",
+        vec![
+            identifier.clone(),
+            Rc::new(TokenField::new(Token::Colon, None)),
+            identifier.clone(),
+        ],
+    ));
+
+    let comma = Rc::new(TokenField::new(Token::Comma, None));
+    let fn_def_arg_set = Rc::new(Concat::new(
+        "fn_def_arg_set",
+        vec![
+            open_paren.clone(),
+            Rc::new(SeparatedList::new(&typed_identifier, &comma, false)),
+            close_paren.clone(),
+        ],
+    ));
+    let fn_def_arg_set_node = Rc::new(Node::new(&fn_def_arg_set, NodeValue::FnDefArgSet));
     fn_def
         .set_symbols(vec![
             Rc::new(TokenField::new(Token::Fn, None)),
             identifier.clone(),
+            Rc::new(Nullable::new(&fn_def_arg_set_node)),
             Rc::new(TokenField::new(Token::TypeArrow, None)),
             identifier.clone(),
             Rc::new(TokenField::new(Token::OpenBrace, None)),
             exprs.clone(),
             Rc::new(TokenField::new(Token::CloseBrace, None)),
+        ])
+        .unwrap();
+    let fn_call_arg_set = Rc::new(SeparatedList::new(&expr_node, &comma, false));
+    let fn_call_arg_set_node = Rc::new(Node::new(&fn_call_arg_set, NodeValue::FnCallArgSet));
+    fn_call
+        .set_symbols(vec![
+            identifier.clone(),
+            Rc::new(TokenField::new(Token::OpenParen, None)),
+            Rc::new(Nullable::new(&fn_call_arg_set_node)),
+            Rc::new(TokenField::new(Token::CloseParen, None)),
         ])
         .unwrap();
     let_.set_symbols(vec![

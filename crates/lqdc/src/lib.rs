@@ -5,7 +5,7 @@ use std::collections::{HashMap, VecDeque};
 
 use codegem::ir::{BasicBlockId, FunctionId, ModuleBuilder, Operation, Type, Value, VariableId};
 use lang_pt::ASTNode;
-use miette::{bail, ensure, miette, Diagnostic, Result, SourceSpan};
+use miette::*;
 
 use frontend::{node::NodeValue, parser};
 use thiserror::Error;
@@ -18,10 +18,50 @@ lazy_static! {
 #[derive(Error, Diagnostic, Debug)]
 pub enum Error {
     #[error("Variable {} does not exist", .0)]
-    VarDoesntExist(String, #[label("here")] SourceSpan, #[source_code] String),
+    VarDoesntExist(String),
     #[error("{}", .0)]
-    #[diagnostic()]
-    ParseError(String, #[label("here")] SourceSpan, #[source_code] String),
+    ParseError(String),
+    #[error("Unknown return type")]
+    UnknownReturnType,
+    #[error("Unknown type")]
+    UnknownType,
+    #[error("Internal compiler error: {}", .0)]
+    InternalCompilerError(String),
+    #[error("{} not allowed in {}", .0, .1)]
+    NotAllowedHere(String, String),
+    #[error("Expected {} args, found {}", .0, .1)]
+    ExpectedNumArgs(usize, usize),
+}
+
+#[derive(Error, Diagnostic, Debug)]
+#[error("")]
+struct Labelled<E: Diagnostic + 'static> {
+    #[source]
+    #[diagnostic_source]
+    source: E,
+    #[label]
+    label: SourceSpan,
+}
+// impl<E: Diagnostic + 'static> Labelled<E> {
+//     fn new(source: E, label: SourceSpan) -> Self {
+//         Self { source, label }
+//     }
+// }
+trait IntoLabelled {
+    fn labelled(self, label: SourceSpan) -> Labelled<Self>
+    where
+        Self: Diagnostic + 'static + Sized;
+}
+impl<E: Diagnostic + 'static + Sized> IntoLabelled for E {
+    fn labelled(self, label: SourceSpan) -> Labelled<Self>
+    where
+        Self: Diagnostic + 'static + Sized,
+    {
+        Labelled {
+            source: self,
+            label,
+        }
+    }
 }
 
 pub struct Compiler<'a> {
@@ -29,7 +69,6 @@ pub struct Compiler<'a> {
     main_function: Option<FunctionId>,
     main_function_entry_block: Option<BasicBlockId>,
     types: Types<'a>,
-    vars: HashMap<&'a str, (Type, VariableId)>,
     functions: HashMap<&'a str, (Type, FunctionId)>,
 }
 
@@ -37,7 +76,6 @@ pub struct Compiler<'a> {
 struct Types<'a> {
     inner: HashMap<&'a str, Type>,
 }
-
 impl Types<'_> {
     fn get(&self, key: &str) -> Option<&Type> {
         let res = self.inner.get(key);
@@ -55,7 +93,6 @@ impl<'a> Compiler<'a> {
             main_function: None,
             main_function_entry_block: None,
             types: Types::default(),
-            vars: HashMap::new(),
             functions: HashMap::new(),
         }
     }
@@ -66,11 +103,7 @@ impl<'a> Compiler<'a> {
         let parsed: Vec<ASTNode<NodeValue>> = match parser.parse(self.input.as_bytes()) {
             Ok(parsed) => parsed,
             Err(parse_error) => {
-                bail!(Error::ParseError(
-                    parse_error.message,
-                    parse_error.pointer.into(),
-                    self.input.to_string()
-                ));
+                bail!(Error::ParseError(parse_error.message,).labelled(parse_error.pointer.into()));
             }
         };
 
@@ -89,19 +122,23 @@ impl<'a> Compiler<'a> {
             bail!(miette!("Not root"))
         }
 
+        let mut global_vars = HashMap::new();
+
         let mut compile_queue = VecDeque::new();
         for child in &root.children {
-            self.compile_node(builder, child, &mut compile_queue)?;
+            self.compile_node(builder, child, &mut compile_queue, &mut global_vars)
+                .map_err(|error| error.with_source_code(self.input.to_string()))?;
         }
 
         // Work on queue
         while !compile_queue.is_empty() {
-            let (func_id, block_id, nodes) = compile_queue.pop_front().unwrap();
+            let (func_id, block_id, nodes, mut vars) = compile_queue.pop_front().unwrap();
             builder.switch_to_function(func_id);
             builder.switch_to_block(block_id);
 
             for node in nodes {
-                self.compile_node(builder, &node, &mut compile_queue)?;
+                self.compile_node(builder, &node, &mut compile_queue, &mut vars)
+                    .map_err(|error| error.with_source_code(self.input.to_string()))?;
             }
         }
 
@@ -128,20 +165,22 @@ impl<'a> Compiler<'a> {
         &mut self,
         builder: &mut ModuleBuilder,
         node: &ASTNode<NodeValue>,
-        compile_queue: &mut VecDeque<(FunctionId, BasicBlockId, Vec<ASTNode<NodeValue>>)>,
+        compile_queue: &mut VecDeque<(
+            FunctionId,
+            BasicBlockId,
+            Vec<ASTNode<NodeValue>>,
+            HashMap<&'a str, (Type, VariableId)>,
+        )>,
+        vars: &mut HashMap<&'a str, (Type, VariableId)>,
     ) -> Result<Option<Value>> {
         match node.node {
             NodeValue::Id => {
                 let id = &self.input[node.start..node.end];
-                let (type_, var_id) = if let Some(thing) = self.vars.get(id) {
+                let (type_, var_id) = if let Some(thing) = vars.get(id) {
                     thing
                 } else {
-                    // bail!(miette!("Variable '{}' does not exist", id))
-                    bail!(Error::VarDoesntExist(
-                        id.to_string(),
-                        (node.start..node.end).into(),
-                        self.input.to_string()
-                    ))
+                    bail!(Error::VarDoesntExist(id.to_string(),)
+                        .labelled((node.start..node.end).into()))
                 };
                 Ok(builder.push_instruction(type_, Operation::GetVar(*var_id)))
             }
@@ -155,28 +194,32 @@ impl<'a> Compiler<'a> {
             NodeValue::Product => {
                 if node.children.len() == 1 {
                     // Just a number
-                    self.compile_node(builder, node.children.first().unwrap(), compile_queue)
+                    self.compile_node(builder, node.children.first().unwrap(), compile_queue, vars)
                 } else if node.children.len() % 2 == 1 {
                     // dbg!(node.children.len());
                     let mut iter = node.children.iter();
 
                     let lhs = iter.next().unwrap();
-                    let mut lhs_imm = self.compile_node(builder, lhs, compile_queue)?.unwrap();
+                    let mut lhs_imm = self
+                        .compile_node(builder, lhs, compile_queue, vars)?
+                        .unwrap();
                     while let Some(op) = iter.next() {
                         let rhs = iter.next().unwrap();
 
                         // let lhs_imm = self.compile_node(builder, lhs)?.unwrap();
-                        let rhs_imm = self.compile_node(builder, rhs, compile_queue)?.unwrap();
+                        let rhs_imm = self
+                            .compile_node(builder, rhs, compile_queue, vars)?
+                            .unwrap();
                         lhs_imm = match op.node {
                             NodeValue::Mul => builder
                                 .push_instruction(
-                                    self.type_of(lhs),
+                                    self.type_of(lhs, vars),
                                     Operation::Mul(lhs_imm, rhs_imm),
                                 )
                                 .unwrap(),
                             NodeValue::Div => builder
                                 .push_instruction(
-                                    self.type_of(lhs),
+                                    self.type_of(lhs, vars),
                                     Operation::Div(lhs_imm, rhs_imm),
                                 )
                                 .unwrap(),
@@ -190,7 +233,7 @@ impl<'a> Compiler<'a> {
             }
             NodeValue::Sum => {
                 if node.children.len() == 1 {
-                    self.compile_node(builder, node.children.first().unwrap(), compile_queue)
+                    self.compile_node(builder, node.children.first().unwrap(), compile_queue, vars)
                 } else if node.children.len() % 2 == 1 {
                     let mut iter = node.children.iter();
 
@@ -199,9 +242,13 @@ impl<'a> Compiler<'a> {
                         let lhs = node;
                         let op = iter.next().unwrap();
                         let rhs = iter.next().unwrap();
-                        let lhs_imm = self.compile_node(builder, lhs, compile_queue)?.unwrap();
-                        let rhs_imm = self.compile_node(builder, rhs, compile_queue)?.unwrap();
-                        let lhs_type = self.type_of(lhs);
+                        let lhs_imm = self
+                            .compile_node(builder, lhs, compile_queue, vars)?
+                            .unwrap();
+                        let rhs_imm = self
+                            .compile_node(builder, rhs, compile_queue, vars)?
+                            .unwrap();
+                        let lhs_type = self.type_of(lhs, vars);
                         result =
                             match op.node {
                                 NodeValue::Add => builder
@@ -220,7 +267,7 @@ impl<'a> Compiler<'a> {
             NodeValue::Expr => {
                 let mut result = None;
                 for child in &node.children {
-                    result = self.compile_node(builder, child, compile_queue)?;
+                    result = self.compile_node(builder, child, compile_queue, vars)?;
                 }
                 Ok(result)
             }
@@ -228,11 +275,13 @@ impl<'a> Compiler<'a> {
                 let id = &node.children[0];
                 let id = &self.input[id.start..id.end];
                 let value = &node.children[1];
-                let value_imm = self.compile_node(builder, value, compile_queue)?.unwrap();
-                let type_ = self.type_of(value).clone();
+                let value_imm = self
+                    .compile_node(builder, value, compile_queue, vars)?
+                    .unwrap();
+                let type_ = self.type_of(value, vars).clone();
                 let var_id = builder.push_variable(id, &type_).unwrap();
                 let result = builder.push_instruction(&type_, Operation::SetVar(var_id, value_imm));
-                self.vars.insert(id, (type_, var_id));
+                vars.insert(id, (type_, var_id));
                 Ok(result)
             }
             NodeValue::FnDef => {
@@ -241,18 +290,47 @@ impl<'a> Compiler<'a> {
                 let id = iter.next().unwrap();
                 let id = &self.input[id.start..id.end];
 
-                let ret_type = iter.next().unwrap();
-                let ret_type = &self.input[ret_type.start..ret_type.end];
-                let ret_type = self
-                    .types
-                    .get(ret_type)
-                    .ok_or_else(|| miette!("Invalid type"))?;
+                let arg_nodes = iter.next().unwrap();
+                let mut arg_nodes_iter = arg_nodes.children.iter();
+                let mut args = vec![];
+                while let Some(arg_name) = arg_nodes_iter.next() {
+                    let type_node = arg_nodes_iter.next().unwrap();
+                    let arg_name = &self.input[arg_name.start..arg_name.end];
+                    let type_ = &self.input[type_node.start..type_node.end];
+                    let type_ = self.types.get(type_).ok_or_else(|| {
+                        Error::UnknownType.labelled((type_node.start..type_node.end).into())
+                    })?;
+                    args.push((arg_name, type_.clone()));
+                }
+
+                let ret_type_node = iter.next().unwrap();
+                let ret_type = &self.input[ret_type_node.start..ret_type_node.end];
+                let ret_type = self.types.get(ret_type).ok_or_else(|| {
+                    Error::UnknownReturnType
+                        .labelled((ret_type_node.start..ret_type_node.end).into())
+                })?;
 
                 // create function
-                let func_id = builder.new_function(id, &[], ret_type);
+                let func_id = builder.new_function(id, args.as_slice(), ret_type);
                 builder.switch_to_function(func_id);
                 let block_id = builder.push_block().unwrap();
                 builder.switch_to_block(block_id);
+
+                let mut vars = HashMap::new();
+                let func_args = builder.get_function_args(func_id);
+                if func_args.is_some() {
+                    let func_args = func_args.unwrap();
+                    ensure!(
+                        func_args.len() == args.len(),
+                        Error::InternalCompilerError(
+                            "func_args.len() != args.len()\nAdding function arguments failed"
+                                .to_string()
+                        )
+                    );
+                    for (variable_id, (name, type_)) in func_args.iter().zip(args) {
+                        vars.insert(name, (type_, *variable_id));
+                    }
+                }
 
                 self.functions.insert(id, (ret_type.clone(), func_id));
 
@@ -260,7 +338,8 @@ impl<'a> Compiler<'a> {
                 compile_queue.push_back((
                     func_id,
                     block_id,
-                    node.children[2..node.children.len()].to_vec(),
+                    node.children[3..node.children.len()].to_vec(),
+                    vars,
                 ));
 
                 // while let Some(node) = iter.next() {
@@ -277,33 +356,71 @@ impl<'a> Compiler<'a> {
                 let id = &node.children[0];
                 let id = &self.input[id.start..id.end];
 
+                let mut args = vec![];
+                let arg_set = &node.children[1];
+                match arg_set.node {
+                    NodeValue::FnCallArgSet => {
+                        for arg in &arg_set.children {
+                            args.push(
+                                self.compile_node(builder, arg, compile_queue, vars)?
+                                    .ok_or_else(|| {
+                                        Error::NotAllowedHere(
+                                            format!("{node:?}"),
+                                            "function calls".to_string(),
+                                        )
+                                        .labelled((arg.start..arg.end).into())
+                                    })?,
+                            )
+                        }
+                    }
+                    NodeValue::NULL => {}
+                    _ => unreachable!(),
+                }
+
                 let (type_, function_id) = self
                     .functions
                     .get(id)
                     .ok_or_else(|| miette!("Unknown function"))?;
-                Ok(builder.push_instruction(type_, Operation::Call(*function_id, vec![])))
+                let func_args = builder.get_function_args(*function_id).ok_or_else(|| {
+                    Error::InternalCompilerError(
+                        "Failed to get function, invalid function_id".to_string(),
+                    )
+                })?;
+                ensure!(
+                    func_args.len() == args.len(),
+                    Error::ExpectedNumArgs(func_args.len(), args.len())
+                        .labelled((arg_set.start..arg_set.end).into())
+                );
+
+                Ok(builder.push_instruction(type_, Operation::Call(*function_id, args)))
             }
             NodeValue::Add
             | NodeValue::Sub
             | NodeValue::Mul
             | NodeValue::Div
             | NodeValue::NULL
-            | NodeValue::Root => {
+            | NodeValue::Root
+            | NodeValue::FnDefArgSet
+            | NodeValue::FnCallArgSet => {
                 unreachable!()
             }
         }
     }
 
-    fn type_of(&self, node: &ASTNode<NodeValue>) -> &Type {
+    fn type_of(
+        &self,
+        node: &ASTNode<NodeValue>,
+        vars: &'a mut HashMap<&str, (Type, VariableId)>,
+    ) -> &Type {
         match node.node {
             NodeValue::Number => self.types.get("int").unwrap(),
             // Type of left hand side
-            NodeValue::Sum => self.type_of(&node.children[0]),
-            NodeValue::Product => self.type_of(&node.children[0]),
-            NodeValue::Expr => self.type_of(node.children.last().unwrap()),
+            NodeValue::Sum => self.type_of(&node.children[0], vars),
+            NodeValue::Product => self.type_of(&node.children[0], vars),
+            NodeValue::Expr => self.type_of(node.children.last().unwrap(), vars),
             // Retrieve from variable list
             // It can be unwrapped, because it will already have been compiled, thus already checked
-            NodeValue::Id => &self.vars.get(&self.input[node.start..node.end]).unwrap().0,
+            NodeValue::Id => &vars.get(&self.input[node.start..node.end]).unwrap().0,
             a => {
                 println!("{a:?} returned Void");
                 &Type::Void
