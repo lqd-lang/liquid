@@ -1,0 +1,13 @@
+fn main -> void {
+    let x = 5000;
+    let y = square(x);
+    let z = cube(y);
+}
+
+fn square(x: int) -> int {
+    x * x
+}
+
+fn cube(x: int) -> int {
+    x * x * x
+}
