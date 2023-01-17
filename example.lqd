@@ -1,5 +1,5 @@
 fn main -> void {
-    let x = 5000;
+    let x = 4;
     let y = square(x);
     let z = cube(y);
 }

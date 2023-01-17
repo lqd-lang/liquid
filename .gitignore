@@ -1,6 +1,7 @@
 target/
 .vscode/
+
 ## For testing
-# example.lqd
-# print_hello_world.c
-# test.nu
+result/
+example.lqd
+test.nu
