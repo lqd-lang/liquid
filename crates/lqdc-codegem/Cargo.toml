@@ -1,0 +1,16 @@
+[package]
+edition = "2021"
+name    = "lqdc-codegem"
+version = "0.1.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+clap.workspace        = true
+codegem.workspace     = true
+lang_pt.workspace     = true
+lazy_static.workspace = true
+miette.workspace      = true
+thiserror.workspace   = true
+
+frontend = { path = "../frontend" }

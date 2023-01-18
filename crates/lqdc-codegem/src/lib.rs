@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate lazy_static;
+
 use std::collections::{HashMap, VecDeque};
 
 use codegem::ir::{
@@ -7,12 +10,64 @@ use lang_pt::ASTNode;
 use miette::*;
 
 use frontend::{node::NodeValue, parser};
-
-use crate::{Error, IntoLabelled};
+use thiserror::Error;
 
 lazy_static! {
     static ref GLOBAL_TYPES: HashMap<&'static str, Type> =
         HashMap::from([("int", Type::Integer(true, 64)), ("void", Type::Void)]);
+}
+
+#[derive(Error, Diagnostic, Debug)]
+pub enum Error {
+    #[error("Variable {} does not exist", .0)]
+    VarDoesntExist(String),
+    #[error("Function {} does not exist", .0)]
+    FuncDoesntExist(String),
+    #[error("{}", .0)]
+    ParseError(String),
+    #[error("Unknown return type")]
+    UnknownReturnType,
+    #[error("Unknown type")]
+    UnknownType,
+    #[error("Internal compiler error: {}", .0)]
+    InternalCompilerError(String),
+    #[error("{} not allowed in {}", .0, .1)]
+    NotAllowedHere(String, String),
+    #[error("Expected {} args, found {}", .0, .1)]
+    ExpectedNumArgs(usize, usize),
+    #[error("Malformed integer")]
+    InvalidInteger,
+}
+
+#[derive(Error, Diagnostic, Debug)]
+#[error("")]
+struct Labelled<E: Diagnostic + 'static> {
+    #[source]
+    #[diagnostic_source]
+    source: E,
+    #[label]
+    label: SourceSpan,
+}
+// impl<E: Diagnostic + 'static> Labelled<E> {
+//     fn new(source: E, label: SourceSpan) -> Self {
+//         Self { source, label }
+//     }
+// }
+trait IntoLabelled {
+    fn labelled(self, label: SourceSpan) -> Labelled<Self>
+    where
+        Self: Diagnostic + 'static + Sized;
+}
+impl<E: Diagnostic + 'static + Sized> IntoLabelled for E {
+    fn labelled(self, label: SourceSpan) -> Labelled<Self>
+    where
+        Self: Diagnostic + 'static + Sized,
+    {
+        Labelled {
+            source: self,
+            label,
+        }
+    }
 }
 
 #[derive(PartialEq)]

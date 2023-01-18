@@ -174,6 +174,8 @@ impl<'module, 'config, 'input, 'types, 'symbols, M: Module>
             | NodeValue::Div
             | NodeValue::FnDefArgSet
             | NodeValue::FnCallArgSet => unreachable!(),
+            NodeValue::Extern => todo!(),
+            NodeValue::FnDecl => todo!(),
         }
     }
 }

@@ -1,0 +1,18 @@
+[package]
+edition = "2021"
+name    = "lqdc-cranelift"
+version = "0.1.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+lang_pt.workspace     = true
+lazy_static.workspace = true
+miette.workspace      = true
+thiserror.workspace   = true
+
+frontend = { path = "../frontend" }
+
+cranelift        = "0.91"
+cranelift-module = "0.91"
+cranelift-object = "0.91"
