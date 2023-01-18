@@ -170,9 +170,20 @@ pub fn parser() -> DefaultParser<NodeValue, Token> {
     extern_
         .set_symbols(vec![
             Rc::new(TokenField::new(Token::Extern, None)),
-            Rc::new(TokenField::new(Token::OpenBrace, None)),
-            Rc::new(List::new(&top)),
-            Rc::new(TokenField::new(Token::CloseBrace, None)),
+            Rc::new(Union::new(
+                "extern_inner",
+                vec![
+                    Rc::new(Concat::new(
+                        "extern_inner_multi",
+                        vec![
+                            Rc::new(TokenField::new(Token::OpenBrace, None)),
+                            Rc::new(List::new(&top)),
+                            Rc::new(TokenField::new(Token::CloseBrace, None)),
+                        ],
+                    )),
+                    top.clone(),
+                ],
+            )),
         ])
         .unwrap();
 

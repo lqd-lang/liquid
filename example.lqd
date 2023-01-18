@@ -1,6 +1,5 @@
-extern {
-    fn print_hello_world -> void;
-    fn start -> void {
-        print_hello_world();
-    }
+extern fn print_hello_world -> void;
+
+fn main -> int {
+    print_hello_world();
 }
