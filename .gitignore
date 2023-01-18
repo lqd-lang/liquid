@@ -5,3 +5,5 @@ target/
 result/
 example.lqd
 test.nu
+print_hello_world.c
+example.s

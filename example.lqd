@@ -1,13 +1,6 @@
-fn main -> void {
-    let x = 4;
-    let y = square(x);
-    let z = cube(y);
-}
-
-fn square(x: int) -> int {
-    x * x
-}
-
-fn cube(x: int) -> int {
-    x * x * x
+extern {
+    fn print_hello_world -> void;
+    fn start -> void {
+        print_hello_world();
+    }
 }

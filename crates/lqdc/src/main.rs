@@ -51,7 +51,7 @@ fn run_codegem(cli: Cli) -> miette::Result<()> {
     let mut file = OpenOptions::new()
         .create(true)
         .write(true)
-        .open(&cli.output.unwrap_or_else(|| name))
+        .open(&cli.output)
         .map_err(|e| miette!("Failed to open output file\n{}", e))?;
     match cli.target.as_str() {
         "rv64" | "riscv64" => {
@@ -120,7 +120,7 @@ struct Cli {
     target: String,
     /// Where to put the result?
     #[clap(short, long)]
-    output: Option<PathBuf>,
+    output: PathBuf,
     #[clap(short, long, default_value = "codegem")]
     backend: String,
 }

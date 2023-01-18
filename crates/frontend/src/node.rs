@@ -28,6 +28,8 @@ pub enum NodeValue {
     FnCall,
     FnDefArgSet,
     FnCallArgSet,
+    Extern,
+    FnDecl,
 }
 
 impl NodeImpl for NodeValue {
@@ -60,6 +62,10 @@ pub fn parser() -> DefaultParser<NodeValue, Token> {
     let sum_node = Rc::new(Node::new(&sum, NodeValue::Sum));
     let fn_call = Rc::new(Concat::init("call"));
     let fn_call_node = Rc::new(Node::new(&fn_call, NodeValue::FnCall));
+    let fn_decl = Rc::new(Concat::init("fn_declare"));
+    let fn_decl_node = Rc::new(Node::new(&fn_decl, NodeValue::FnDecl));
+    let extern_ = Rc::new(Concat::init("extern"));
+    let extern_node = Rc::new(Node::new(&extern_, NodeValue::Extern));
     let let_ = Rc::new(Concat::init("let"));
     let let_node = Rc::new(Node::new(&let_, NodeValue::VarAssign));
     let fn_def = Rc::new(Concat::init("fn_def"));
@@ -76,11 +82,18 @@ pub fn parser() -> DefaultParser<NodeValue, Token> {
     ));
     let expr_node = Rc::new(Node::new(&expression, NodeValue::Expr));
     let exprs = Rc::new(SeparatedList::new(&expr_node, &semicolon, true));
+    let top = Rc::new(Union::new(
+        "top_level",
+        vec![
+            extern_node.clone(),
+            fn_decl_node.clone(),
+            fn_def_node.clone(),
+        ],
+    ));
     let root = Rc::new(Concat::new(
         "root",
-        vec![Rc::new(List::new(&fn_def_node)), end_of_file],
+        vec![Rc::new(List::new(&top)), end_of_file],
     ));
-    let root_node = Rc::new(Node::new(&root, NodeValue::Root));
 
     let open_paren = Rc::new(TokenField::new(Token::OpenParen, None));
     let close_paren = Rc::new(TokenField::new(Token::CloseParen, None));
@@ -144,7 +157,25 @@ pub fn parser() -> DefaultParser<NodeValue, Token> {
             paren_expr.clone(),
         ])
         .unwrap();
+    fn_decl
+        .set_symbols(vec![
+            Rc::new(TokenField::new(Token::Fn, None)),
+            identifier.clone(),
+            Rc::new(Nullable::new(&fn_def_arg_set_node)),
+            Rc::new(TokenField::new(Token::TypeArrow, None)),
+            identifier.clone(),
+            semicolon.clone(),
+        ])
+        .unwrap();
+    extern_
+        .set_symbols(vec![
+            Rc::new(TokenField::new(Token::Extern, None)),
+            Rc::new(TokenField::new(Token::OpenBrace, None)),
+            Rc::new(List::new(&top)),
+            Rc::new(TokenField::new(Token::CloseBrace, None)),
+        ])
+        .unwrap();
 
-    let parser = DefaultParser::new(Rc::new(token::tokenizer()), root_node).unwrap();
+    let parser = DefaultParser::new(Rc::new(token::tokenizer()), root).unwrap();
     parser
 }

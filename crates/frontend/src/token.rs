@@ -38,6 +38,7 @@ pub enum Token {
     Fn,
     Undefined,
     TypeArrow,
+    Extern,
 }
 
 impl TokenImpl for Token {
@@ -68,6 +69,7 @@ pub fn tokenizer() -> Tokenizer<Token> {
             ("undefined", Token::Undefined),
             ("let", Token::Let),
             ("fn", Token::Fn),
+            ("extern", Token::Extern),
         ],
     )
     .unwrap();
