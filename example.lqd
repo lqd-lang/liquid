@@ -2,4 +2,5 @@ extern fn print_hello_world -> void;
 
 fn main -> int {
     print_hello_world();
+    0
 }

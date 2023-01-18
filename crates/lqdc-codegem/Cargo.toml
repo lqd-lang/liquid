@@ -13,4 +13,5 @@ lazy_static.workspace = true
 miette.workspace      = true
 thiserror.workspace   = true
 
-frontend = { path = "../frontend" }
+frontend    = { path = "../frontend" }
+lqdc-common = { path = "../lqdc-common" }

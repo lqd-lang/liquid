@@ -4,92 +4,18 @@ extern crate lazy_static;
 use std::collections::{HashMap, VecDeque};
 
 use codegem::ir::{
-    BasicBlockId, FunctionId, Linkage, ModuleBuilder, Operation, Type, Value, VariableId,
+    BasicBlockId, FunctionId, Linkage, ModuleBuilder, Operation, Terminator, Type, Value,
+    VariableId,
 };
 use lang_pt::ASTNode;
 use miette::*;
 
 use frontend::{node::NodeValue, parser};
-use thiserror::Error;
+use lqdc_common::{Error, IntoLabelled, ScopeType, Stack};
 
 lazy_static! {
     static ref GLOBAL_TYPES: HashMap<&'static str, Type> =
         HashMap::from([("int", Type::Integer(true, 64)), ("void", Type::Void)]);
-}
-
-#[derive(Error, Diagnostic, Debug)]
-pub enum Error {
-    #[error("Variable {} does not exist", .0)]
-    VarDoesntExist(String),
-    #[error("Function {} does not exist", .0)]
-    FuncDoesntExist(String),
-    #[error("{}", .0)]
-    ParseError(String),
-    #[error("Unknown return type")]
-    UnknownReturnType,
-    #[error("Unknown type")]
-    UnknownType,
-    #[error("Internal compiler error: {}", .0)]
-    InternalCompilerError(String),
-    #[error("{} not allowed in {}", .0, .1)]
-    NotAllowedHere(String, String),
-    #[error("Expected {} args, found {}", .0, .1)]
-    ExpectedNumArgs(usize, usize),
-    #[error("Malformed integer")]
-    InvalidInteger,
-}
-
-#[derive(Error, Diagnostic, Debug)]
-#[error("")]
-struct Labelled<E: Diagnostic + 'static> {
-    #[source]
-    #[diagnostic_source]
-    source: E,
-    #[label]
-    label: SourceSpan,
-}
-// impl<E: Diagnostic + 'static> Labelled<E> {
-//     fn new(source: E, label: SourceSpan) -> Self {
-//         Self { source, label }
-//     }
-// }
-trait IntoLabelled {
-    fn labelled(self, label: SourceSpan) -> Labelled<Self>
-    where
-        Self: Diagnostic + 'static + Sized;
-}
-impl<E: Diagnostic + 'static + Sized> IntoLabelled for E {
-    fn labelled(self, label: SourceSpan) -> Labelled<Self>
-    where
-        Self: Diagnostic + 'static + Sized,
-    {
-        Labelled {
-            source: self,
-            label,
-        }
-    }
-}
-
-#[derive(PartialEq)]
-enum ScopeType {
-    Extern,
-}
-
-struct Stack<T>(VecDeque<T>);
-
-impl<T> Stack<T> {
-    fn push(&mut self, t: T) {
-        self.0.push_back(t);
-    }
-    fn pop(&mut self) -> Option<T> {
-        self.0.pop_back()
-    }
-    fn new() -> Self {
-        Self(VecDeque::new())
-    }
-    fn iter(&mut self) -> std::collections::vec_deque::Iter<T> {
-        self.0.iter()
-    }
 }
 
 pub struct Compiler<'a> {
@@ -152,9 +78,16 @@ impl<'a> Compiler<'a> {
             builder.switch_to_function(func_id);
             builder.switch_to_block(block_id);
 
+            let mut result = None;
             for node in nodes {
-                self.compile_node(builder, &node, &mut compile_queue, &mut vars, &mut scope)
+                result = self
+                    .compile_node(builder, &node, &mut compile_queue, &mut vars, &mut scope)
                     .map_err(|error| error.with_source_code(self.input.to_string()))?;
+            }
+            if let Some(result) = result {
+                builder.set_terminator(Terminator::Return(result))
+            } else {
+                builder.set_terminator(Terminator::ReturnVoid)
             }
         }
 
