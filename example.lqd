@@ -2,5 +2,12 @@ extern fn print_hello_world -> void;
 
 fn main -> int {
     print_hello_world();
-    0
+
+    is_bad(
+        4
+    );
+}
+
+fn is_bad(x: int) -> bool {
+    x >= 15
 }

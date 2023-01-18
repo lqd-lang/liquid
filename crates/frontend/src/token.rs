@@ -39,6 +39,11 @@ pub enum Token {
     Undefined,
     TypeArrow,
     Extern,
+    GT,
+    GTE,
+    EQ,
+    LT,
+    LTE,
 }
 
 impl TokenImpl for Token {
@@ -82,11 +87,11 @@ pub fn tokenizer() -> Tokenizer<Token> {
         ("-", Token::Sub),
         ("*", Token::Mul),
         ("/", Token::Div),
-        // ("<", Token::LT),
-        // ("<=", Token::LTE),
-        // (">", Token::GT),
-        // (">=", Token::GTE),
-        // ("==", Token::EQ),
+        ("<", Token::LT),
+        ("<=", Token::LTE),
+        (">", Token::GT),
+        (">=", Token::GTE),
+        ("==", Token::EQ),
         ("=", Token::Assign),
         ("{", Token::OpenBrace),
         ("}", Token::CloseBrace),

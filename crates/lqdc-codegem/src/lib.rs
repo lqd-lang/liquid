@@ -14,8 +14,11 @@ use frontend::{node::NodeValue, parser};
 use lqdc_common::{Error, IntoLabelled, ScopeType, Stack};
 
 lazy_static! {
-    static ref GLOBAL_TYPES: HashMap<&'static str, Type> =
-        HashMap::from([("int", Type::Integer(true, 64)), ("void", Type::Void)]);
+    static ref GLOBAL_TYPES: HashMap<&'static str, Type> = HashMap::from([
+        ("int", Type::Integer(true, 64)),
+        ("void", Type::Void),
+        ("bool", Type::Integer(false, 1))
+    ]);
 }
 
 pub struct Compiler<'a> {
@@ -49,7 +52,6 @@ impl<'a> Compiler<'a> {
 
     pub fn compile(&mut self, builder: &mut ModuleBuilder) -> Result<()> {
         let parser = parser();
-        // TODO: Better error handling
         let parsed: Vec<ASTNode<NodeValue>> = match parser.parse(self.input.as_bytes()) {
             Ok(parsed) => parsed,
             Err(parse_error) => {
@@ -343,7 +345,12 @@ impl<'a> Compiler<'a> {
             | NodeValue::NULL
             | NodeValue::Root
             | NodeValue::FnDefArgSet
-            | NodeValue::FnCallArgSet => {
+            | NodeValue::FnCallArgSet
+            | NodeValue::GT
+            | NodeValue::GTE
+            | NodeValue::EQ
+            | NodeValue::LT
+            | NodeValue::LTE => {
                 unreachable!()
             }
             NodeValue::Extern => {
@@ -393,6 +400,55 @@ impl<'a> Compiler<'a> {
 
                 Ok(None)
             }
+            NodeValue::BoolExpr => {
+                if node.children.len() == 1 {
+                    self.compile_node(builder, &node.children[0], compile_queue, vars, scope)
+                } else {
+                    let mut iter = node.children.iter();
+
+                    let mut result = None;
+                    while let Some(node) = iter.next() {
+                        let lhs = node;
+                        let op = iter.next().unwrap();
+                        let rhs = iter.next().unwrap();
+                        let lhs_imm = self
+                            .compile_node(builder, lhs, compile_queue, vars, scope)?
+                            .unwrap();
+                        let rhs_imm = self
+                            .compile_node(builder, rhs, compile_queue, vars, scope)?
+                            .unwrap();
+                        let _lhs_type = self.type_of(lhs, vars);
+                        result = match op.node {
+                            NodeValue::GT => {
+                                builder.push_instruction(Operation::Gt(lhs_imm, rhs_imm))
+                            }
+                            NodeValue::GTE => {
+                                builder.push_instruction(Operation::Ge(lhs_imm, rhs_imm))
+                            }
+                            NodeValue::EQ => {
+                                builder.push_instruction(Operation::Eq(lhs_imm, rhs_imm))
+                            }
+                            NodeValue::LT => {
+                                builder.push_instruction(Operation::Lt(lhs_imm, rhs_imm))
+                            }
+                            NodeValue::LTE => {
+                                builder.push_instruction(Operation::Le(lhs_imm, rhs_imm))
+                            }
+                            _ => unreachable!(),
+                        };
+                    }
+
+                    Ok(result)
+                }
+            }
+            NodeValue::True => Ok(builder.push_instruction(Operation::Integer(
+                self.types.get("bool").unwrap().clone(),
+                0b1_u8.to_le_bytes().to_vec(),
+            ))),
+            NodeValue::False => Ok(builder.push_instruction(Operation::Integer(
+                self.types.get("bool").unwrap().clone(),
+                0b0_u8.to_le_bytes().to_vec(),
+            ))),
         }
     }
 

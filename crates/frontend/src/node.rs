@@ -19,6 +19,11 @@ pub enum NodeValue {
     Sub,
     Mul,
     Div,
+    GT,
+    GTE,
+    EQ,
+    LT,
+    LTE,
     Product,
     Sum,
     Expr,
@@ -30,6 +35,9 @@ pub enum NodeValue {
     FnCallArgSet,
     Extern,
     FnDecl,
+    BoolExpr,
+    True,
+    False,
 }
 
 impl NodeImpl for NodeValue {
@@ -51,6 +59,13 @@ pub fn parser() -> DefaultParser<NodeValue, Token> {
         (Token::Mul, Some(NodeValue::Mul)),
         (Token::Div, Some(NodeValue::Div)),
     ]));
+    let bool_ops = Rc::new(TokenFieldSet::new(vec![
+        (Token::GT, Some(NodeValue::GT)),
+        (Token::GTE, Some(NodeValue::GTE)),
+        (Token::EQ, Some(NodeValue::EQ)),
+        (Token::LT, Some(NodeValue::LT)),
+        (Token::LTE, Some(NodeValue::LTE)),
+    ]));
 
     let paren_expr = Rc::new(Concat::init("paren_expr"));
 
@@ -58,26 +73,38 @@ pub fn parser() -> DefaultParser<NodeValue, Token> {
 
     let product = Rc::new(SeparatedList::new(&value, &mul_ops, true));
     let product_node = Rc::new(Node::new(&product, NodeValue::Product));
+
     let sum = Rc::new(SeparatedList::new(&product_node, &add_ops, true));
     let sum_node = Rc::new(Node::new(&sum, NodeValue::Sum));
+
+    let bool_expr = Rc::new(SeparatedList::new(&sum_node, &bool_ops, true));
+    let bool_expr_node = Rc::new(Node::new(&bool_expr, NodeValue::BoolExpr));
+
     let fn_call = Rc::new(Concat::init("call"));
     let fn_call_node = Rc::new(Node::new(&fn_call, NodeValue::FnCall));
+
     let fn_decl = Rc::new(Concat::init("fn_declare"));
     let fn_decl_node = Rc::new(Node::new(&fn_decl, NodeValue::FnDecl));
+
     let extern_ = Rc::new(Concat::init("extern"));
     let extern_node = Rc::new(Node::new(&extern_, NodeValue::Extern));
+
     let let_ = Rc::new(Concat::init("let"));
     let let_node = Rc::new(Node::new(&let_, NodeValue::VarAssign));
+
     let fn_def = Rc::new(Concat::init("fn_def"));
     let fn_def_node = Rc::new(Node::new(&fn_def, NodeValue::FnDef));
+
     let semicolon = Rc::new(TokenField::new(Token::Semicolon, None));
+
     let expression = Rc::new(Union::new(
         "expression",
         vec![
             fn_call_node.clone(),
             let_node.clone(),
             fn_def_node.clone(),
-            sum_node.clone(),
+            // sum_node.clone(),
+            bool_expr_node.clone(),
         ],
     ));
     let expr_node = Rc::new(Node::new(&expression, NodeValue::Expr));
@@ -98,7 +125,11 @@ pub fn parser() -> DefaultParser<NodeValue, Token> {
     let open_paren = Rc::new(TokenField::new(Token::OpenParen, None));
     let close_paren = Rc::new(TokenField::new(Token::CloseParen, None));
     paren_expr
-        .set_symbols(vec![open_paren.clone(), sum.clone(), close_paren.clone()])
+        .set_symbols(vec![
+            open_paren.clone(),
+            expr_node.clone(),
+            close_paren.clone(),
+        ])
         .unwrap();
 
     let typed_identifier = Rc::new(Concat::new(
