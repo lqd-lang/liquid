@@ -1,51 +1,29 @@
-#[macro_use]
-extern crate lazy_static;
+mod type_;
 
-use std::collections::{HashMap, VecDeque};
+use std::{
+    collections::{HashMap, VecDeque},
+    str::FromStr,
+};
 
 use codegem::ir::{
-    BasicBlockId, FunctionId, Linkage, ModuleBuilder, Operation, Terminator, Type, Value,
-    VariableId,
+    BasicBlockId, FunctionId, Linkage, ModuleBuilder, Operation, Terminator, Value, VariableId,
 };
 use lang_pt::ASTNode;
 use miette::*;
 
 use frontend::{node::NodeValue, parser};
 use lqdc_common::{Error, IntoLabelled, ScopeType, Stack};
-
-lazy_static! {
-    static ref GLOBAL_TYPES: HashMap<&'static str, Type> = HashMap::from([
-        ("int", Type::Integer(true, 64)),
-        ("void", Type::Void),
-        ("bool", Type::Integer(false, 1))
-    ]);
-}
+use type_::{map_type, Type};
 
 pub struct Compiler<'a> {
     input: &'a str,
-    types: Types<'a>,
     functions: HashMap<&'a str, (Type, FunctionId)>,
-}
-
-#[derive(Default)]
-struct Types<'a> {
-    inner: HashMap<&'a str, Type>,
-}
-impl Types<'_> {
-    fn get(&self, key: &str) -> Option<&Type> {
-        let res = self.inner.get(key);
-        if res.is_none() {
-            return GLOBAL_TYPES.get(key);
-        }
-        res
-    }
 }
 
 impl<'a> Compiler<'a> {
     pub fn new(input: &'a str) -> Self {
         Self {
             input,
-            types: Types::default(),
             functions: HashMap::new(),
         }
     }
@@ -123,7 +101,7 @@ impl<'a> Compiler<'a> {
             NodeValue::Number => {
                 let num = self.input[node.start..node.end].parse::<i64>().unwrap();
                 Ok(builder.push_instruction(Operation::Integer(
-                    self.types.get("int").unwrap().clone(),
+                    map_type(Type::Int),
                     num.to_le_bytes().to_vec(),
                 )))
             }
@@ -221,8 +199,8 @@ impl<'a> Compiler<'a> {
                 let value_imm = self
                     .compile_node(builder, value, compile_queue, vars, scope)?
                     .unwrap();
-                let type_ = self.type_of(value, vars).clone();
-                let var_id = builder.push_variable(id, &type_).unwrap();
+                let type_ = self.type_of(value, vars);
+                let var_id = builder.push_variable(id, &map_type(type_)).unwrap();
                 let result = builder.push_instruction(Operation::SetVar(var_id, value_imm));
                 vars.insert(id.to_string(), (type_, var_id));
                 Ok(result)
@@ -240,18 +218,15 @@ impl<'a> Compiler<'a> {
                     let type_node = arg_nodes_iter.next().unwrap();
                     let arg_name = &self.input[arg_name.start..arg_name.end];
                     let type_ = &self.input[type_node.start..type_node.end];
-                    let type_ = self.types.get(type_).ok_or_else(|| {
-                        Error::UnknownType.labelled((type_node.start..type_node.end).into())
-                    })?;
-                    args.push((arg_name.to_string(), type_.clone()));
+                    let type_ = Type::from_str(type_)
+                        .map_err(|e| e.labelled((type_node.start..type_node.end).into()))?;
+                    args.push((arg_name.to_string(), type_));
                 }
 
                 let ret_type_node = iter.next().unwrap();
                 let ret_type = &self.input[ret_type_node.start..ret_type_node.end];
-                let ret_type = self.types.get(ret_type).ok_or_else(|| {
-                    Error::UnknownReturnType
-                        .labelled((ret_type_node.start..ret_type_node.end).into())
-                })?;
+                let ret_type = Type::from_str(ret_type)
+                    .map_err(|e| e.labelled((ret_type_node.start..ret_type_node.end).into()))?;
 
                 // create function
                 let linkage = if scope.iter().any(|t| t == &ScopeType::Extern) || id == "main" {
@@ -259,30 +234,34 @@ impl<'a> Compiler<'a> {
                 } else {
                     Linkage::Private
                 };
-                let func_id = builder.new_function(id, linkage, args.as_slice(), ret_type);
+                let func_id = builder.new_function(
+                    id,
+                    linkage,
+                    args.iter()
+                        .map(|(a, t)| (a.clone(), map_type(*t)))
+                        .collect::<Vec<_>>()
+                        .as_slice(),
+                    &map_type(ret_type),
+                );
                 builder.switch_to_function(func_id);
                 let block_id = builder.push_block().unwrap();
                 builder.switch_to_block(block_id);
 
-                let mut vars = HashMap::new();
-                let func_args = builder.get_function_args(func_id);
-                if func_args.is_some() {
-                    let func_args = func_args.unwrap();
-                    ensure!(
-                        func_args.len() == args.len(),
-                        Error::InternalCompilerError(
-                            "func_args.len() != args.len()\nAdding function arguments failed"
-                                .to_string()
-                        )
-                    );
-                    for (variable_id, (name, type_)) in func_args.iter().zip(args) {
-                        vars.insert(name, (type_, *variable_id));
-                    }
-                }
-
-                self.functions.insert(id, (ret_type.clone(), func_id));
+                self.functions.insert(id, (ret_type, func_id));
 
                 // Add to compile queue
+                let mut vars = HashMap::new();
+
+                for (i, var_id) in builder
+                    .get_function_args(func_id)
+                    .unwrap()
+                    .iter()
+                    .enumerate()
+                {
+                    let (name, type_) = &args[i];
+                    vars.insert(name.clone(), (*type_, *var_id));
+                }
+
                 compile_queue.push_back((
                     func_id,
                     block_id,
@@ -377,26 +356,31 @@ impl<'a> Compiler<'a> {
                     let type_node = arg_nodes_iter.next().unwrap();
                     let arg_name = &self.input[arg_name.start..arg_name.end];
                     let type_ = &self.input[type_node.start..type_node.end];
-                    let type_ = self.types.get(type_).ok_or_else(|| {
-                        Error::UnknownType.labelled((type_node.start..type_node.end).into())
-                    })?;
-                    args.push((arg_name.to_string(), type_.clone()));
+                    let type_ = Type::from_str(type_)
+                        .map_err(|e| e.labelled((type_node.start..type_node.end).into()))?;
+                    args.push((arg_name.to_string(), type_));
                 }
 
                 let ret_type_node = iter.next().unwrap();
                 let ret_type = &self.input[ret_type_node.start..ret_type_node.end];
-                let ret_type = self.types.get(ret_type).ok_or_else(|| {
-                    Error::UnknownReturnType
-                        .labelled((ret_type_node.start..ret_type_node.end).into())
-                })?;
+                let ret_type = Type::from_str(ret_type)
+                    .map_err(|e| e.labelled((ret_type_node.start..ret_type_node.end).into()))?;
 
                 let linkage = if scope.iter().any(|t| t == &ScopeType::Extern) {
                     Linkage::External
                 } else {
                     Linkage::Private
                 };
-                let func_id = builder.new_function(id, linkage, args.as_slice(), ret_type);
-                self.functions.insert(id, (ret_type.clone(), func_id));
+                let func_id = builder.new_function(
+                    id,
+                    linkage,
+                    args.iter()
+                        .map(|(a, t)| (a.clone(), map_type(*t)))
+                        .collect::<Vec<_>>()
+                        .as_slice(),
+                    &map_type(ret_type),
+                );
+                self.functions.insert(id, (ret_type, func_id));
 
                 Ok(None)
             }
@@ -442,11 +426,11 @@ impl<'a> Compiler<'a> {
                 }
             }
             NodeValue::True => Ok(builder.push_instruction(Operation::Integer(
-                self.types.get("bool").unwrap().clone(),
+                map_type(Type::Bool),
                 0b1_u8.to_le_bytes().to_vec(),
             ))),
             NodeValue::False => Ok(builder.push_instruction(Operation::Integer(
-                self.types.get("bool").unwrap().clone(),
+                map_type(Type::Bool),
                 0b0_u8.to_le_bytes().to_vec(),
             ))),
         }
@@ -456,20 +440,75 @@ impl<'a> Compiler<'a> {
         &self,
         node: &ASTNode<NodeValue>,
         vars: &'a mut HashMap<String, (Type, VariableId)>,
-    ) -> &Type {
+    ) -> Type {
         match node.node {
-            NodeValue::Number => self.types.get("int").unwrap(),
+            NodeValue::Number => Type::Int,
             // Type of left hand side
             NodeValue::Sum => self.type_of(&node.children[0], vars),
             NodeValue::Product => self.type_of(&node.children[0], vars),
             NodeValue::Expr => self.type_of(node.children.last().unwrap(), vars),
             // Retrieve from variable list
             // It can be unwrapped, because it will already have been compiled, thus already checked
-            NodeValue::Id => &vars.get(&self.input[node.start..node.end]).unwrap().0,
+            NodeValue::Id => vars.get(&self.input[node.start..node.end]).unwrap().0,
+            NodeValue::True => Type::Bool,
+            NodeValue::False => Type::Bool,
             a => {
-                println!("{a:?} returned Void");
-                &Type::Void
+                dbg!(a);
+                Type::Void
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    mod type_of {
+        use std::collections::HashMap;
+
+        use frontend::parser;
+
+        use crate::{type_::Type, Compiler};
+
+        #[test]
+        fn true_() {
+            let compiler = Compiler::new("");
+            let type_ = compiler.type_of(
+                parser()
+                    .debug_production_at("value", "true".as_bytes(), 0)
+                    .unwrap()
+                    .first()
+                    .unwrap(),
+                &mut HashMap::new(),
+            );
+            assert_eq!(type_, Type::Bool,);
+        }
+
+        #[test]
+        fn false_() {
+            let compiler = Compiler::new("");
+            let type_ = compiler.type_of(
+                parser()
+                    .debug_production_at("value", "true".as_bytes(), 0)
+                    .unwrap()
+                    .first()
+                    .unwrap(),
+                &mut HashMap::new(),
+            );
+            assert_eq!(type_, Type::Bool);
+        }
+
+        #[test]
+        fn number() {
+            let compiler = Compiler::new("");
+            let type_ = compiler.type_of(
+                parser()
+                    .debug_production_at("value", "158910".as_bytes(), 0)
+                    .unwrap()
+                    .first()
+                    .unwrap(),
+                &mut HashMap::new(),
+            );
+            assert_eq!(type_, Type::Int);
         }
     }
 }

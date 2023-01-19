@@ -186,6 +186,8 @@ pub fn parser() -> DefaultParser<NodeValue, Token> {
             number,
             identifier.clone(),
             paren_expr.clone(),
+            Rc::new(TokenField::new(Token::True, Some(NodeValue::True))),
+            Rc::new(TokenField::new(Token::False, Some(NodeValue::False))),
         ])
         .unwrap();
     fn_decl
@@ -218,6 +220,9 @@ pub fn parser() -> DefaultParser<NodeValue, Token> {
         ])
         .unwrap();
 
-    let parser = DefaultParser::new(Rc::new(token::tokenizer()), root).unwrap();
+    let mut parser = DefaultParser::new(Rc::new(token::tokenizer()), root).unwrap();
+
+    parser.add_debug_production("value", &value);
+
     parser
 }

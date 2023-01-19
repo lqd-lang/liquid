@@ -4,7 +4,7 @@ fn main -> int {
     print_hello_world();
 
     is_bad(
-        4
+        true
     );
 }
 
