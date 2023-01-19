@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use lqdc_common::Error;
+use crate::Error;
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum Type {
@@ -19,13 +19,5 @@ impl FromStr for Type {
             "void" => Ok(Self::Void),
             _ => Err(Error::UnknownType),
         }
-    }
-}
-
-pub fn map_type(type_: Type) -> codegem::ir::Type {
-    match type_ {
-        Type::Int => codegem::ir::Type::Integer(true, 64),
-        Type::Bool => codegem::ir::Type::Integer(false, 1),
-        Type::Void => codegem::ir::Type::Void,
     }
 }

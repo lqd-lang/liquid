@@ -18,7 +18,10 @@ use codegem::{
     regalloc::RegAlloc,
 };
 
-use lqdc_codegem::Compiler;
+use lqdc_codegem::{
+    codegen::CodegenPass, make_signatures::MakeSignaturesPass, parsepass::ParsePass,
+};
+use lqdc_common::codepass::PassRunner;
 use miette::*;
 
 fn main() -> Result<()> {
@@ -27,10 +30,14 @@ fn main() -> Result<()> {
     let without_ext = cli.input.with_extension("");
     let name = without_ext.file_name().unwrap().to_str().unwrap();
     let input = read_to_string(&cli.input).into_diagnostic()?;
-    let mut compiler = Compiler::new(&input);
+    // let mut compiler = Compiler::new(&input);
     let mut builder = ModuleBuilder::default().with_name(name);
 
-    compiler.compile(&mut builder)?;
+    PassRunner::<()>::new(&input)
+        .run::<ParsePass>()?
+        // .inject::<TypeCheck>()?
+        .run::<MakeSignaturesPass>()?
+        .run_with_arg::<CodegenPass>(&mut builder)?;
 
     let module = builder.build();
 

@@ -1,3 +1,6 @@
+pub mod codepass;
+pub mod type_;
+
 use std::collections::VecDeque;
 
 use miette::*;

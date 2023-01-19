@@ -100,11 +100,11 @@ pub fn parser() -> DefaultParser<NodeValue, Token> {
     let expression = Rc::new(Union::new(
         "expression",
         vec![
-            fn_call_node.clone(),
+            bool_expr_node.clone(),
             let_node.clone(),
+            fn_call_node.clone(),
             fn_def_node.clone(),
             // sum_node.clone(),
-            bool_expr_node.clone(),
         ],
     ));
     let expr_node = Rc::new(Node::new(&expression, NodeValue::Expr));
