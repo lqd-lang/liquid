@@ -18,3 +18,9 @@ impl<'input> CodePass<'input> for ParsePass {
         })
     }
 }
+
+impl Into<Vec<ASTNode<NodeValue>>> for ParsePass {
+    fn into(self) -> Vec<ASTNode<NodeValue>> {
+        self.nodes
+    }
+}

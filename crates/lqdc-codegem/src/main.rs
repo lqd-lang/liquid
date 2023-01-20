@@ -19,7 +19,7 @@ use codegem::{
 };
 
 use lqdc_codegem::{
-    codegen::CodegenPass, make_signatures::MakeSignaturesPass, parsepass::ParsePass,
+    codegen::CodegenPass, make_signatures::MakeSignaturesPass, parsepass::ParsePass, CodegemError,
 };
 use lqdc_common::codepass::PassRunner;
 use miette::*;
@@ -39,7 +39,7 @@ fn main() -> Result<()> {
         .run::<MakeSignaturesPass>()?
         .run_with_arg::<CodegenPass>(&mut builder)?;
 
-    let module = builder.build();
+    let module = builder.build().map_err(CodegemError::ModuleCreationError)?;
 
     let mut out = OpenOptions::new()
         .write(true)

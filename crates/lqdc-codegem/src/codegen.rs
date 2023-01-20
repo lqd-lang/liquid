@@ -1,13 +1,15 @@
 use std::collections::HashMap;
 
-use codegem::ir::{FunctionId, Linkage, ModuleBuilder, Operation, Value, VariableId};
+use codegem::ir::{
+    FunctionId, Linkage, ModuleBuilder, Operation, ToIntegerOperation, Value, VariableId,
+};
 use lang_pt::ASTNode;
 use miette::*;
 
 use frontend::node::NodeValue;
 use lqdc_common::{codepass::CodePass, type_::Type, Error, IntoLabelled};
 
-use crate::{make_signatures::MakeSignaturesPass, map_type};
+use crate::{make_signatures::MakeSignaturesPass, map_type, CodegemError};
 
 pub struct CodegenPass;
 impl<'input> CodePass<'input> for CodegenPass {
@@ -26,7 +28,6 @@ impl<'input> CodePass<'input> for CodegenPass {
                     .as_slice(),
                 &map_type(ret_type),
             );
-            builder.switch_to_function(func_id);
             functions.insert(name, (linkage, args, ret_type, nodes, func_id));
         }
         for (_, (_, args, _, nodes, func_id)) in &functions {
@@ -37,6 +38,11 @@ impl<'input> CodePass<'input> for CodegenPass {
             {
                 vars.insert(name.to_string(), (*type_, id));
             }
+            builder.switch_to_function(*func_id);
+            let block = builder
+                .push_block()
+                .map_err(CodegemError::ModuleCreationError)?;
+            builder.switch_to_block(block);
             for node in nodes {
                 compile_node(input, builder, node, &mut vars, &functions)?;
             }
@@ -70,14 +76,18 @@ fn compile_node(
             } else {
                 bail!(Error::VarDoesntExist(id.to_string(),).labelled((node.start..node.end).into()))
             };
-            Ok(builder.push_instruction(Operation::GetVar(*var_id)))
+            Ok(builder
+                .push_instruction(Operation::GetVar(*var_id))
+                .map_err(CodegemError::ModuleCreationError)?)
         }
         NodeValue::Number => {
             let num = input[node.start..node.end].parse::<i64>().unwrap();
-            Ok(builder.push_instruction(Operation::Integer(
-                map_type(Type::Int),
-                num.to_le_bytes().to_vec(),
-            )))
+            Ok(builder
+                .push_instruction(Operation::Integer(
+                    map_type(Type::Int),
+                    num.to_le_bytes().to_vec(),
+                ))
+                .map_err(CodegemError::ModuleCreationError)?)
         }
         NodeValue::Product => {
             if node.children.len() == 1 {
@@ -103,9 +113,11 @@ fn compile_node(
                     lhs_imm = match op.node {
                         NodeValue::Mul => builder
                             .push_instruction(Operation::Mul(lhs_imm, rhs_imm))
+                            .map_err(CodegemError::ModuleCreationError)?
                             .unwrap(),
                         NodeValue::Div => builder
                             .push_instruction(Operation::Div(lhs_imm, rhs_imm))
+                            .map_err(CodegemError::ModuleCreationError)?
                             .unwrap(),
                         _ => unreachable!(),
                     };
@@ -136,12 +148,12 @@ fn compile_node(
                     let rhs_imm = compile_node(input, builder, rhs, vars, functions)?.unwrap();
                     let _lhs_type = type_of(input, lhs, vars, functions);
                     result = match op.node {
-                        NodeValue::Add => {
-                            builder.push_instruction(Operation::Add(lhs_imm, rhs_imm))
-                        }
-                        NodeValue::Sub => {
-                            builder.push_instruction(Operation::Sub(lhs_imm, rhs_imm))
-                        }
+                        NodeValue::Add => builder
+                            .push_instruction(Operation::Add(lhs_imm, rhs_imm))
+                            .map_err(CodegemError::ModuleCreationError)?,
+                        NodeValue::Sub => builder
+                            .push_instruction(Operation::Sub(lhs_imm, rhs_imm))
+                            .map_err(CodegemError::ModuleCreationError)?,
                         _ => unreachable!(),
                     };
                 }
@@ -167,7 +179,7 @@ fn compile_node(
             let var_id = builder.push_variable(id, &map_type(type_)).unwrap();
             let result = builder.push_instruction(Operation::SetVar(var_id, value_imm));
             vars.insert(id.to_string(), (type_, var_id));
-            Ok(result)
+            Ok(result.map_err(CodegemError::ModuleCreationError)?)
         }
         NodeValue::FnCall => {
             let id = &node.children[0];
@@ -177,12 +189,13 @@ fn compile_node(
             let arg_set = &node.children[1];
             match arg_set.node {
                 NodeValue::FnCallArgSet => {
+                    // dbg!(&arg_set.children);
                     for arg in &arg_set.children {
                         args.push(
                             compile_node(input, builder, arg, vars, functions)?.ok_or_else(
                                 || {
                                     Error::NotAllowedHere(
-                                        format!("{:?}", node.node),
+                                        format!("{:?}", arg.node),
                                         "function calls".to_string(),
                                     )
                                     .labelled((arg.start..arg.end).into())
@@ -209,7 +222,9 @@ fn compile_node(
                     .labelled((arg_set.start..arg_set.end).into())
             );
 
-            Ok(builder.push_instruction(Operation::Call(*function_id, args)))
+            Ok(builder
+                .push_instruction(Operation::Call(*function_id, args))
+                .map_err(CodegemError::ModuleCreationError)?)
         }
         NodeValue::BoolExpr => {
             if node.children.len() == 1 {
@@ -223,14 +238,25 @@ fn compile_node(
                     let rhs = iter.next().unwrap();
                     dbg!(lhs);
                     let lhs_imm = compile_node(input, builder, lhs, vars, functions)?.unwrap();
+                    dbg!(rhs);
                     let rhs_imm = compile_node(input, builder, rhs, vars, functions)?.unwrap();
                     let _lhs_type = type_of(input, lhs, vars, functions);
                     result = match op.node {
-                        NodeValue::GT => builder.push_instruction(Operation::Gt(lhs_imm, rhs_imm)),
-                        NodeValue::GTE => builder.push_instruction(Operation::Ge(lhs_imm, rhs_imm)),
-                        NodeValue::EQ => builder.push_instruction(Operation::Eq(lhs_imm, rhs_imm)),
-                        NodeValue::LT => builder.push_instruction(Operation::Lt(lhs_imm, rhs_imm)),
-                        NodeValue::LTE => builder.push_instruction(Operation::Le(lhs_imm, rhs_imm)),
+                        NodeValue::GT => builder
+                            .push_instruction(Operation::Gt(lhs_imm, rhs_imm))
+                            .map_err(CodegemError::ModuleCreationError)?,
+                        NodeValue::GTE => builder
+                            .push_instruction(Operation::Ge(lhs_imm, rhs_imm))
+                            .map_err(CodegemError::ModuleCreationError)?,
+                        NodeValue::EQ => builder
+                            .push_instruction(Operation::Eq(lhs_imm, rhs_imm))
+                            .map_err(CodegemError::ModuleCreationError)?,
+                        NodeValue::LT => builder
+                            .push_instruction(Operation::Lt(lhs_imm, rhs_imm))
+                            .map_err(CodegemError::ModuleCreationError)?,
+                        NodeValue::LTE => builder
+                            .push_instruction(Operation::Le(lhs_imm, rhs_imm))
+                            .map_err(CodegemError::ModuleCreationError)?,
                         _ => unreachable!(),
                     };
                 }
@@ -238,14 +264,12 @@ fn compile_node(
                 Ok(result)
             }
         }
-        NodeValue::True => Ok(builder.push_instruction(Operation::Integer(
-            map_type(Type::Bool),
-            0b1_u8.to_le_bytes().to_vec(),
-        ))),
-        NodeValue::False => Ok(builder.push_instruction(Operation::Integer(
-            map_type(Type::Bool),
-            0b0_u8.to_le_bytes().to_vec(),
-        ))),
+        NodeValue::True => Ok(builder
+            .push_instruction(0b1_u8.to_integer_operation())
+            .map_err(CodegemError::ModuleCreationError)?),
+        NodeValue::False => Ok(builder
+            .push_instruction(0b0_u8.to_integer_operation())
+            .map_err(CodegemError::ModuleCreationError)?),
         NodeValue::Add
         | NodeValue::Sub
         | NodeValue::Mul
