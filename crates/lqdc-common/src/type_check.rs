@@ -5,6 +5,7 @@ use miette::*;
 
 use crate::{
     codepass::{CodePass, Is},
+    linkage::Linkage,
     make_signatures::MakeSignaturesPass,
     type_::Type,
     Error, IntoLabelled,
@@ -29,6 +30,9 @@ impl<'input, 'a> CodePass<'input> for TypeCheck<'input, 'a> {
             vars: HashMap::new(),
         };
         for function in &prev.functions {
+            if function.1 .0 == Linkage::External {
+                continue;
+            }
             me.vars = HashMap::new();
             for (name, type_) in &function.1 .1 {
                 me.vars.insert(name, *type_);
@@ -37,16 +41,16 @@ impl<'input, 'a> CodePass<'input> for TypeCheck<'input, 'a> {
             for node in &function.1 .3 {
                 result = me.check_node(node)?;
             }
+            let result_coerced = result.coerce(function.1 .2);
             ensure!(
-                result == function.1 .2,
-                Error::TypeMismatch(
+                result_coerced.is_ok(),
+                crate::Error::TypeMismatch(
                     format!("{:?}", function.1 .2),
                     format!("{:?}", result),
                     (function.1 .3.last().unwrap().start..function.1 .3.last().unwrap().end).into()
                 )
-            )
+            );
         }
-        println!("Type checking complete");
 
         Ok(prev)
     }
@@ -67,7 +71,7 @@ impl TypeCheck<'_, '_> {
                     })
                     .cloned()?)
             }
-            NodeValue::Number => Ok(Type::Int),
+            NodeValue::Number => Ok(Type::Number),
             NodeValue::Add => todo!(),
             NodeValue::Sub => todo!(),
             NodeValue::Mul => todo!(),
@@ -85,9 +89,17 @@ impl TypeCheck<'_, '_> {
 
                     let lhs = self.check_node(iter.next().unwrap())?;
                     while let Some(_op) = iter.next() {
-                        let rhs = self.check_node(iter.next().unwrap())?;
+                        let rhs_node = iter.next().unwrap();
+                        let rhs = self.check_node(rhs_node)?.coerce(lhs)?;
 
-                        ensure!(lhs == rhs, "Mismatched types");
+                        ensure!(
+                            lhs == rhs,
+                            Error::TypeMismatch(
+                                format!("{:?}", lhs),
+                                format!("{:?}", rhs),
+                                (rhs_node.start..rhs_node.end).into()
+                            )
+                        );
                     }
 
                     Ok(lhs)
@@ -101,9 +113,17 @@ impl TypeCheck<'_, '_> {
 
                     let lhs = self.check_node(iter.next().unwrap())?;
                     while let Some(_op) = iter.next() {
-                        let rhs = self.check_node(iter.next().unwrap())?;
+                        let rhs_node = iter.next().unwrap();
+                        let rhs = self.check_node(rhs_node)?.coerce(lhs)?;
 
-                        ensure!(lhs == rhs, "Mismatched types");
+                        ensure!(
+                            lhs == rhs,
+                            Error::TypeMismatch(
+                                format!("{:?}", lhs),
+                                format!("{:?}", rhs),
+                                (rhs_node.start..rhs_node.end).into()
+                            )
+                        );
                     }
 
                     Ok(lhs)
@@ -167,9 +187,17 @@ impl TypeCheck<'_, '_> {
 
                     let lhs = self.check_node(iter.next().unwrap())?;
                     while let Some(_op) = iter.next() {
-                        let rhs = self.check_node(iter.next().unwrap())?;
+                        let rhs_node = iter.next().unwrap();
+                        let rhs = self.check_node(rhs_node)?.coerce(lhs)?;
 
-                        ensure!(lhs == rhs, "Mismatched types");
+                        ensure!(
+                            lhs == rhs,
+                            Error::TypeMismatch(
+                                format!("{:?}", lhs),
+                                format!("{:?}", rhs),
+                                (rhs_node.start..rhs_node.end).into()
+                            )
+                        );
                     }
 
                     Ok(Type::Bool)

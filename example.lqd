@@ -1,9 +1,14 @@
-extern fn print_hello_world -> void;
+extern {
+    fn print_hello_world -> void;
+    fn print_num(x: int) -> void;
+    fn get_num -> int;
+}
 
-fn main -> int {
+fn main -> uint {
     print_hello_world();
 
-    is_bad(16);
+    is_bad(get_num());
+
     0
 }
 
