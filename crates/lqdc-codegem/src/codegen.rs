@@ -7,7 +7,11 @@ use lang_pt::ASTNode;
 use miette::*;
 
 use frontend::node::NodeValue;
-use lqdc_common::{codepass::CodePass, type_::Type, Error, IntoLabelled};
+use lqdc_common::{
+    codepass::{CodePass, Is},
+    type_::Type,
+    Error, IntoLabelled,
+};
 
 use crate::{make_signatures::MakeSignaturesPass, map_type, CodegemError};
 
@@ -16,8 +20,13 @@ impl<'input> CodePass<'input> for CodegenPass {
     type Prev = MakeSignaturesPass<'input>;
     type Arg = &'input mut ModuleBuilder;
 
-    fn pass(prev: Self::Prev, input: &'input str, builder: Self::Arg) -> miette::Result<Self> {
+    fn pass(
+        prev: Self::Prev,
+        input: &'input str,
+        builder: &mut impl Is<Self::Arg>,
+    ) -> miette::Result<Self> {
         let mut functions = HashMap::new();
+        let builder = builder.is_mut();
         for (name, (linkage, args, ret_type, nodes)) in prev.functions {
             let func_id = builder.new_function(
                 name,
@@ -236,9 +245,10 @@ fn compile_node(
                 while let Some(lhs) = iter.next() {
                     let op = iter.next().unwrap();
                     let rhs = iter.next().unwrap();
-                    dbg!(lhs);
+                    // dbg!(lhs);
+                    // dbg!(op);
+                    // dbg!(rhs);
                     let lhs_imm = compile_node(input, builder, lhs, vars, functions)?.unwrap();
-                    dbg!(rhs);
                     let rhs_imm = compile_node(input, builder, rhs, vars, functions)?.unwrap();
                     let _lhs_type = type_of(input, lhs, vars, functions);
                     result = match op.node {

@@ -3,7 +3,11 @@ use std::{collections::HashMap, str::FromStr};
 use codegem::ir::Linkage;
 use frontend::node::NodeValue;
 use lang_pt::ASTNode;
-use lqdc_common::{codepass::CodePass, type_::Type, IntoLabelled, ScopeType, Stack};
+use lqdc_common::{
+    codepass::{CodePass, Is},
+    type_::Type,
+    IntoLabelled, ScopeType, Stack,
+};
 
 use crate::parsepass::ParsePass;
 
@@ -24,7 +28,11 @@ impl<'input> CodePass<'input> for MakeSignaturesPass<'input> {
     type Prev = ParsePass;
     type Arg = ();
 
-    fn pass(mut previous: Self::Prev, input: &'input str, _: Self::Arg) -> miette::Result<Self> {
+    fn pass(
+        mut previous: Self::Prev,
+        input: &'input str,
+        _: &mut impl Is<Self::Arg>,
+    ) -> miette::Result<Self> {
         let mut me = Self {
             functions: HashMap::new(),
             scope: Stack::new(),

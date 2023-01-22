@@ -26,6 +26,12 @@ pub enum Error {
     ExpectedNumArgs(usize, usize),
     #[error("Malformed integer")]
     InvalidInteger,
+    #[error("Expected {}, found {}", .0, .1)]
+    TypeMismatch(
+        String,
+        String,
+        #[label("This should be a {}", .0)] SourceSpan,
+    ),
 }
 
 #[derive(Error, Diagnostic, Debug)]

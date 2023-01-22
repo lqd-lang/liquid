@@ -19,7 +19,8 @@ use codegem::{
 };
 
 use lqdc_codegem::{
-    codegen::CodegenPass, make_signatures::MakeSignaturesPass, parsepass::ParsePass, CodegemError,
+    codegen::CodegenPass, make_signatures::MakeSignaturesPass, parsepass::ParsePass,
+    type_check::TypeCheck, CodegemError,
 };
 use lqdc_common::codepass::PassRunner;
 use miette::*;
@@ -33,11 +34,12 @@ fn main() -> Result<()> {
     // let mut compiler = Compiler::new(&input);
     let mut builder = ModuleBuilder::default().with_name(name);
 
-    PassRunner::<()>::new(&input)
+    PassRunner::<(), ()>::new(&input)
         .run::<ParsePass>()?
-        // .inject::<TypeCheck>()?
         .run::<MakeSignaturesPass>()?
-        .run_with_arg::<CodegenPass>(&mut builder)?;
+        .set_arg(&mut builder)
+        .inject::<TypeCheck>()?
+        .run::<CodegenPass>()?;
 
     let module = builder.build().map_err(CodegemError::ModuleCreationError)?;
 
