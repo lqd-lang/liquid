@@ -1,5 +1,9 @@
 pub mod codepass;
+pub mod linkage;
+pub mod make_signatures;
+pub mod parsepass;
 pub mod type_;
+pub mod type_check;
 
 use std::collections::VecDeque;
 

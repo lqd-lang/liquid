@@ -1,16 +1,15 @@
 use std::collections::HashMap;
 
-use codegem::ir::ModuleBuilder;
 use lang_pt::ASTNode;
 use miette::*;
 
-use crate::make_signatures::MakeSignaturesPass;
-use frontend::node::NodeValue;
-use lqdc_common::{
+use crate::{
     codepass::{CodePass, Is},
+    make_signatures::MakeSignaturesPass,
     type_::Type,
     Error, IntoLabelled,
 };
+use frontend::node::NodeValue;
 
 pub struct TypeCheck<'input, 'a> {
     input: &'input str,
@@ -20,9 +19,9 @@ pub struct TypeCheck<'input, 'a> {
 }
 impl<'input, 'a> CodePass<'input> for TypeCheck<'input, 'a> {
     type Prev = MakeSignaturesPass<'input>;
-    type Arg = &'input mut ModuleBuilder;
+    type Arg = ();
 
-    fn check(prev: Self::Prev, input: &str, _builder: &impl Is<Self::Arg>) -> Result<Self::Prev> {
+    fn check(prev: Self::Prev, input: &str, _: &impl Is<Self::Arg>) -> Result<Self::Prev> {
         let mut me = TypeCheck {
             input,
             // builder: builder.is(),
@@ -34,9 +33,18 @@ impl<'input, 'a> CodePass<'input> for TypeCheck<'input, 'a> {
             for (name, type_) in &function.1 .1 {
                 me.vars.insert(name, *type_);
             }
+            let mut result = Type::Void;
             for node in &function.1 .3 {
-                me.check_node(node)?;
+                result = me.check_node(node)?;
             }
+            ensure!(
+                result == function.1 .2,
+                Error::TypeMismatch(
+                    format!("{:?}", function.1 .2),
+                    format!("{:?}", result),
+                    (function.1 .3.last().unwrap().start..function.1 .3.last().unwrap().end).into()
+                )
+            )
         }
         println!("Type checking complete");
 
@@ -164,11 +172,85 @@ impl TypeCheck<'_, '_> {
                         ensure!(lhs == rhs, "Mismatched types");
                     }
 
-                    Ok(lhs)
+                    Ok(Type::Bool)
                 }
             }
             NodeValue::True => Ok(Type::Bool),
             NodeValue::False => Ok(Type::Bool),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use miette::*;
+
+    use crate::{codepass::PassRunner, make_signatures::MakeSignaturesPass, parsepass::ParsePass};
+
+    use super::TypeCheck;
+
+    #[test]
+    fn bool_in_int_function_call() -> Result<()> {
+        let input = "
+        fn main -> void {
+            other_function(false);
+        }
+
+        fn other_function(x: int) -> int {
+            x
+        }
+        ";
+        let result = PassRunner::<(), ()>::new(input)
+            .run::<ParsePass>()?
+            .run::<MakeSignaturesPass>()?
+            .inject::<TypeCheck>();
+
+        assert!(result.is_err());
+
+        Ok(())
+    }
+
+    #[test]
+    fn int_in_bool_function_call() -> Result<()> {
+        let input = "
+        fn main -> void {
+            other_function(1);
+        }
+
+        fn other_function(x: bool) -> bool {
+            x
+        }
+        ";
+        let result = PassRunner::<(), ()>::new(input)
+            .run::<ParsePass>()?
+            .run::<MakeSignaturesPass>()?
+            .inject::<TypeCheck>();
+
+        assert!(result.is_err());
+
+        Ok(())
+    }
+
+    #[test]
+    fn return_specified_type() -> Result<()> {
+        let input = "
+        fn main -> void {
+            true
+        }
+        fn other_function -> bool {
+            14
+        }
+        fn otherer_function -> int {
+            false
+        }
+        ";
+        let result = PassRunner::<(), ()>::new(input)
+            .run::<ParsePass>()?
+            .run::<MakeSignaturesPass>()?
+            .inject::<TypeCheck>();
+
+        assert!(result.is_err());
+
+        Ok(())
     }
 }

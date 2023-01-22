@@ -1,19 +1,18 @@
 use std::collections::HashMap;
 
-use codegem::ir::{
-    FunctionId, Linkage, ModuleBuilder, Operation, ToIntegerOperation, Value, VariableId,
-};
+use codegem::ir::{FunctionId, ModuleBuilder, Operation, ToIntegerOperation, Value, VariableId};
 use lang_pt::ASTNode;
 use miette::*;
 
+use crate::{map_linkage, map_type, CodegemError};
 use frontend::node::NodeValue;
 use lqdc_common::{
     codepass::{CodePass, Is},
+    linkage::Linkage,
+    make_signatures::MakeSignaturesPass,
     type_::Type,
     Error, IntoLabelled,
 };
-
-use crate::{make_signatures::MakeSignaturesPass, map_type, CodegemError};
 
 pub struct CodegenPass;
 impl<'input> CodePass<'input> for CodegenPass {
@@ -30,7 +29,7 @@ impl<'input> CodePass<'input> for CodegenPass {
         for (name, (linkage, args, ret_type, nodes)) in prev.functions {
             let func_id = builder.new_function(
                 name,
-                linkage,
+                map_linkage(&linkage),
                 args.iter()
                     .map(|(a, t)| (a.to_string(), map_type(*t)))
                     .collect::<Vec<_>>()

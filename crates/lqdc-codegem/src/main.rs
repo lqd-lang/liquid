@@ -18,11 +18,11 @@ use codegem::{
     regalloc::RegAlloc,
 };
 
-use lqdc_codegem::{
-    codegen::CodegenPass, make_signatures::MakeSignaturesPass, parsepass::ParsePass,
-    type_check::TypeCheck, CodegemError,
+use lqdc_codegem::{codegen::CodegenPass, CodegemError};
+use lqdc_common::{
+    codepass::PassRunner, make_signatures::MakeSignaturesPass, parsepass::ParsePass,
+    type_check::TypeCheck,
 };
-use lqdc_common::codepass::PassRunner;
 use miette::*;
 
 fn main() -> Result<()> {
@@ -37,8 +37,8 @@ fn main() -> Result<()> {
     PassRunner::<(), ()>::new(&input)
         .run::<ParsePass>()?
         .run::<MakeSignaturesPass>()?
-        .set_arg(&mut builder)
         .inject::<TypeCheck>()?
+        .set_arg(&mut builder)
         .run::<CodegenPass>()?;
 
     let module = builder.build().map_err(CodegemError::ModuleCreationError)?;

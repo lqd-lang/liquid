@@ -1,18 +1,19 @@
-use std::{collections::HashMap, str::FromStr};
+use std::collections::HashMap;
+use std::str::FromStr;
 
-use codegem::ir::Linkage;
-use frontend::node::NodeValue;
-use lang_pt::ASTNode;
-use lqdc_common::{
+use crate::linkage::Linkage;
+use crate::{
     codepass::{CodePass, Is},
     type_::Type,
     IntoLabelled, ScopeType, Stack,
 };
+use frontend::node::NodeValue;
+use lang_pt::ASTNode;
 
 use crate::parsepass::ParsePass;
 
 pub struct MakeSignaturesPass<'input> {
-    pub(crate) functions: HashMap<
+    pub functions: HashMap<
         &'input str,
         (
             Linkage,

@@ -1,9 +1,9 @@
-use frontend::{node::NodeValue, parser};
-use lang_pt::ASTNode;
-use lqdc_common::{
+use crate::{
     codepass::{CodePass, Is},
     Error, IntoLabelled,
 };
+use frontend::{node::NodeValue, parser};
+use lang_pt::ASTNode;
 
 pub struct ParsePass {
     pub(crate) nodes: Vec<ASTNode<NodeValue>>,

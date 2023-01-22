@@ -3,7 +3,8 @@ extern fn print_hello_world -> void;
 fn main -> int {
     print_hello_world();
 
-    is_bad( false );
+    is_bad(16);
+    0
 }
 
 fn is_bad(x: int) -> bool {
