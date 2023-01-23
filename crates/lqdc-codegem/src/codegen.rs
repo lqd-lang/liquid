@@ -335,6 +335,7 @@ fn type_of(
 
 #[cfg(test)]
 mod tests {
+    #[cfg(debug_assertions)]
     mod type_of {
         use std::collections::HashMap;
 

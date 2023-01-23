@@ -4,6 +4,7 @@ members = ["crates/*"]
 [workspace.dependencies]
 clap        = { version = "4.0", features = ["derive"] }
 codegem     = { git = "https://github.com/code-gem/codegem" }
+criterion   = "0.4"
 lang_pt     = { version = "0.1" }
 lazy_static = { version = "1.4" }
 miette      = { version = "5.5" }

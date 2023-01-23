@@ -8,9 +8,7 @@ fn main -> uint {
     print_hello_world();
 
     is_bad(get_num());
-
     
-
     0
 }
 
