@@ -1,0 +1,8 @@
+extern {
+    fn print_hello_world -> void;
+
+    fn print_hello_world_twice -> void {
+        print_hello_world();
+        print_hello_world();
+    }
+}

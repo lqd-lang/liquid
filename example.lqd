@@ -1,11 +1,12 @@
 extern {
+    fn print_hello_world_twice -> void;
     fn print_hello_world -> void;
     fn print_num(x: int) -> void;
     fn get_num -> int;
 }
 
 fn main -> uint {
-    print_hello_world();
+    print_hello_world_twice();
 
     is_bad(get_num());
     
