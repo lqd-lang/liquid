@@ -1,6 +1,10 @@
 pub mod codegen;
 
-use codegem::ir::ModuleCreationError;
+pub mod codegem {
+    pub use codegem::*;
+}
+
+use crate::codegem::ir::ModuleCreationError;
 use lqdc_common::{linkage::Linkage, type_::Type};
 use miette::Diagnostic;
 use thiserror::Error;
