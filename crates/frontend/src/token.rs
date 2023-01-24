@@ -44,6 +44,8 @@ pub enum Token {
     EQ,
     LT,
     LTE,
+    // Comment
+    Comment,
 }
 
 impl TokenImpl for Token {
@@ -53,13 +55,16 @@ impl TokenImpl for Token {
 
     fn is_structural(&self) -> bool {
         match self {
-            Token::Space | Token::LineBreak => false,
+            Token::Space | Token::LineBreak | Token::Comment => false,
             _ => true,
         }
     }
 }
 
 pub fn tokenizer() -> Tokenizer<Token> {
+    // (\/\/.*)|(\/\*[^]*\*\/)
+    let comment: Pattern<Token> = Pattern::new(Token::Comment, r#"//.*"#).unwrap();
+
     let identifier: Pattern<Token> = Pattern::new(Token::Id, r#"^[_$a-zA-Z][_$\w]*"#).unwrap();
     let mapping_identifier = Mapper::new(
         identifier,
@@ -107,6 +112,7 @@ pub fn tokenizer() -> Tokenizer<Token> {
     .unwrap();
 
     let tokenizer = Tokenizer::new(vec![
+        Rc::new(comment),
         Rc::new(non_break_space),
         Rc::new(mapping_identifier),
         Rc::new(number_literal),
@@ -115,4 +121,27 @@ pub fn tokenizer() -> Tokenizer<Token> {
     ]);
 
     tokenizer
+}
+
+#[cfg(test)]
+mod tests {
+    // These have been removed
+    #[ignore]
+    #[test]
+    fn multi_line_comment() {
+        let input = "/*
+            Hello, World!
+        */fn other_func -> void { other_func() }";
+        // let input = "/**/
+        // fn other_func -> void { 0 }";
+        let parser = crate::parser();
+        parser.parse(input.as_bytes()).unwrap();
+    }
+
+    #[test]
+    fn single_line_comment() {
+        let input = "// Hello, World!
+        fn other_func -> void { other_func() }";
+        crate::parser().parse(input.as_bytes()).unwrap();
+    }
 }

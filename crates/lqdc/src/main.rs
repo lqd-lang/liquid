@@ -26,13 +26,23 @@ use lqdc_common::{
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    let tmp_folder = PathBuf::from(format!(
-        ".lqdc-tmp-{}",
-        Local::now().format("%d-%m-%Y_%H%M%S")
-    ));
+    let tmp_folder = if cli.temp_dir.is_none() {
+        PathBuf::from(format!(
+            ".lqdc-tmp-{}",
+            Local::now().format("%d-%m-%Y_%H%M%S")
+        ))
+    } else {
+        cli.temp_dir.unwrap()
+    };
+    if tmp_folder.exists() {
+        fs::remove_dir_all(&tmp_folder)
+            .into_diagnostic()
+            .map_err(|e| e.wrap_err("Failed to delete temp folder"))?;
+    }
+
     fs::create_dir(&tmp_folder)
         .into_diagnostic()
-        .map_err(|e| e.wrap_err("Failed to create tmp folder"))?;
+        .map_err(|e| e.wrap_err("Failed to create temp folder"))?;
 
     let mut outputs = vec![];
     for input in cli.input {
@@ -48,51 +58,54 @@ fn main() -> Result<()> {
         let input = read_to_string(&input).into_diagnostic()?;
         let mut module_builder = ModuleBuilder::default().with_name(name);
 
-        PassRunner::<(), ()>::new(&input)
+        let runner = PassRunner::<(), ()>::new(&input)
             .run::<ParsePass>()?
             .run::<MakeSignaturesPass>()?
-            .inject::<TypeCheck>()?
-            .set_arg(&mut module_builder)
-            .run::<CodegenPass>()?;
+            .inject::<TypeCheck>()?;
 
-        let module = module_builder
-            .build()
-            .map_err(CodegemError::ModuleCreationError)?;
+        if !cli.check {
+            runner.set_arg(&mut module_builder).run::<CodegenPass>()?;
 
-        let mut vcode = module.lower_to_vcode::<X64Instruction, X64Selector>();
-        vcode.allocate_regs::<RegAlloc>();
+            let module = module_builder
+                .build()
+                .map_err(CodegemError::ModuleCreationError)?;
 
-        let mut buf = Vec::new();
+            let mut vcode = module.lower_to_vcode::<X64Instruction, X64Selector>();
+            vcode.allocate_regs::<RegAlloc>();
 
-        {
-            vcode.emit_assembly(&mut buf).into_diagnostic()?;
+            let mut buf = Vec::new();
+
+            {
+                vcode.emit_assembly(&mut buf).into_diagnostic()?;
+            }
+
+            // Codegem generates assembly with percentage signs, but clang does not support them
+            let str_buf = String::from_utf8(buf).into_diagnostic()?;
+            let str_buf = str_buf.replace("%", "");
+            file.write_all(str_buf.as_bytes()).into_diagnostic()?;
+            #[cfg(any(feature = "clang", feature = "gcc"))]
+            {
+                #[cfg(feature = "clang")]
+                let mut command = Command::new("clang");
+                #[cfg(feature = "gcc")]
+                let mut command = Command::new("gcc");
+                for output in &outputs {
+                    command.arg(output.to_str().unwrap());
+                }
+                command
+                    .args(["-o", &cli.output.to_str().unwrap()])
+                    .args(&cli.linker_args)
+                    .status()
+                    .unwrap();
+            }
         }
-
-        // Codegem generates assembly with percentage signs, but clang does not support them
-        let str_buf = String::from_utf8(buf).into_diagnostic()?;
-        let str_buf = str_buf.replace("%", "");
-        file.write_all(str_buf.as_bytes()).into_diagnostic()?;
     }
 
-    #[cfg(any(feature = "clang", feature = "gcc"))]
-    {
-        #[cfg(feature = "clang")]
-        let mut command = Command::new("clang");
-        #[cfg(feature = "gcc")]
-        let mut command = Command::new("gcc");
-        for output in outputs {
-            command.arg(output.to_str().unwrap());
-        }
-        command
-            .args(["-o", &cli.output.to_str().unwrap()])
-            .args(&cli.linker_args)
-            .status()
-            .unwrap();
+    if !cli.keep_temp {
+        remove_dir_all(tmp_folder)
+            .into_diagnostic()
+            .map_err(|e| e.wrap_err("Failed to delete tmp folder"))?;
     }
-
-    remove_dir_all(tmp_folder)
-        .into_diagnostic()
-        .map_err(|e| e.wrap_err("Failed to delete tmp folder"))?;
 
     Ok(())
 }
@@ -107,4 +120,12 @@ struct Cli {
     gen_obj_files: bool,
     #[clap(short = 'L')]
     linker_args: Vec<String>,
+    #[clap(long)]
+    check: bool,
+    /// Don't delete the temp folder when completed
+    #[clap(long)]
+    keep_temp: bool,
+    /// Set the temp directory manually
+    #[clap(long)]
+    temp_dir: Option<PathBuf>,
 }

@@ -1,22 +1,5 @@
-extern {
-    fn print_hello_world_twice -> void;
-    fn print_hello_world -> void;
-    fn print_num(x: int) -> void;
-    fn get_num -> int;
-}
+// Hello world!
 
 fn main -> uint {
-    print_hello_world_twice();
-
-    is_bad(get_num());
-    
     0
-}
-
-fn is_bad(x: int) -> bool {
-    x >= 15
-}
-
-fn not(x: bool) -> bool {
-    x == false
 }
