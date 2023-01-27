@@ -131,7 +131,16 @@ impl TypeCheck<'_, '_> {
             }
             NodeValue::Expr => self.check_node(&node.children[0]),
             NodeValue::Root => todo!(),
-            NodeValue::VarAssign => todo!(),
+            NodeValue::VarAssign => {
+                let identifier = &node.children[0];
+                let identifier = &self.input[identifier.start..identifier.end];
+                let expr = &node.children[1];
+                let expr_type = self.check_node(expr)?;
+
+                self.vars.insert(identifier, expr_type);
+
+                Ok(expr_type)
+            }
             NodeValue::FnDef => todo!(),
             NodeValue::FnCall => {
                 let id = &node.children[0];
@@ -205,6 +214,11 @@ impl TypeCheck<'_, '_> {
             }
             NodeValue::True => Ok(Type::Bool),
             NodeValue::False => Ok(Type::Bool),
+            NodeValue::If => {
+                let final_expr = &node.children[node.children.len() - 1];
+
+                self.check_node(final_expr)
+            }
         }
     }
 }

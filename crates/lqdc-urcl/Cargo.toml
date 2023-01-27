@@ -1,0 +1,14 @@
+[package]
+edition = "2021"
+name    = "lqdc-urcl"
+version = "0.1.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+lqdc-codegem = { path = "../lqdc-codegem" }
+lqdc-common  = { path = "../lqdc-common" }
+url-open     = { path = "../url-open" }
+
+clap.workspace   = true
+miette.workspace = true

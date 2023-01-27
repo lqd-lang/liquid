@@ -38,6 +38,7 @@ pub enum NodeValue {
     BoolExpr,
     True,
     False,
+    If,
 }
 
 impl NodeImpl for NodeValue {
@@ -97,9 +98,13 @@ pub fn parser() -> DefaultParser<NodeValue, Token> {
 
     let semicolon = Rc::new(TokenField::new(Token::Semicolon, None));
 
+    let if_expr = Rc::new(Concat::init("if_expr"));
+    let if_expr_node = Rc::new(Node::new(&if_expr, NodeValue::If));
+
     let expression = Rc::new(Union::new(
         "expression",
         vec![
+            if_expr_node.clone(),
             bool_expr_node.clone(),
             let_node.clone(),
             fn_call_node.clone(),
@@ -121,6 +126,16 @@ pub fn parser() -> DefaultParser<NodeValue, Token> {
         "root",
         vec![Rc::new(List::new(&top)), end_of_file],
     ));
+
+    if_expr
+        .set_symbols(vec![
+            Rc::new(TokenField::new(Token::If, None)),
+            bool_expr_node.clone(),
+            Rc::new(TokenField::new(Token::OpenBrace, None)),
+            exprs.clone(),
+            Rc::new(TokenField::new(Token::CloseBrace, None)),
+        ])
+        .unwrap();
 
     let open_paren = Rc::new(TokenField::new(Token::OpenParen, None));
     let close_paren = Rc::new(TokenField::new(Token::CloseParen, None));

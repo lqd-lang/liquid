@@ -1,5 +1,13 @@
-// Hello world!
+// Hello, World!
 
 fn main -> uint {
+    if not(false) {
+        let thing = false;
+    };
+
     0
+}
+
+fn not(x: bool) -> bool {
+    x == false
 }

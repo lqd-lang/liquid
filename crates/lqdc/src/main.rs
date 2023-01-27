@@ -70,6 +70,15 @@ fn main() -> Result<()> {
                 .build()
                 .map_err(CodegemError::ModuleCreationError)?;
 
+            if cli.emit_codegem {
+                fs::write(
+                    tmp_folder.join(format!("{name}.codegem")),
+                    format!("{module}"),
+                )
+                .into_diagnostic()
+                .map_err(|e| e.wrap_err("Failed to emit codegem IR"))?;
+            }
+
             let mut vcode = module.lower_to_vcode::<X64Instruction, X64Selector>();
             vcode.allocate_regs::<RegAlloc>();
 
@@ -128,4 +137,8 @@ struct Cli {
     /// Set the temp directory manually
     #[clap(long)]
     temp_dir: Option<PathBuf>,
+    /// Emit codegem IR into the temp directory.
+    /// You probably want --keep-dir as well
+    #[clap(long)]
+    emit_codegem: bool,
 }

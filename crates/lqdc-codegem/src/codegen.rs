@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
-use codegem::ir::{FunctionId, ModuleBuilder, Operation, ToIntegerOperation, Value, VariableId};
+use codegem::ir::{
+    FunctionId, ModuleBuilder, Operation, Terminator, ToIntegerOperation, Value, VariableId,
+};
 use lang_pt::ASTNode;
 use miette::*;
 
@@ -60,6 +62,7 @@ impl<'input> CodePass<'input> for CodegenPass {
     }
 }
 
+#[allow(unused_macros)]
 fn compile_node(
     input: &str,
     builder: &mut ModuleBuilder,
@@ -76,6 +79,17 @@ fn compile_node(
         ),
     >,
 ) -> Result<Option<Value>> {
+    macro_rules! compile_node {
+        ($x:expr) => {
+            compile_node(input, builder, $x, vars, functions)
+        };
+    }
+    macro_rules! type_of {
+        ($x:expr) => {
+            type_of(input, $x, vars, functions)
+        };
+    }
+
     match node.node {
         NodeValue::Id => {
             let id = &input[node.start..node.end];
@@ -244,12 +258,8 @@ fn compile_node(
                 while let Some(lhs) = iter.next() {
                     let op = iter.next().unwrap();
                     let rhs = iter.next().unwrap();
-                    // dbg!(lhs);
-                    // dbg!(op);
-                    // dbg!(rhs);
-                    let lhs_imm = compile_node(input, builder, lhs, vars, functions)?.unwrap();
-                    let rhs_imm = compile_node(input, builder, rhs, vars, functions)?.unwrap();
-                    let _lhs_type = type_of(input, lhs, vars, functions);
+                    let lhs_imm = compile_node!(lhs)?.unwrap();
+                    let rhs_imm = compile_node!(rhs)?.unwrap();
                     result = match op.node {
                         NodeValue::GT => builder
                             .push_instruction(Operation::Gt(lhs_imm, rhs_imm))
@@ -296,6 +306,47 @@ fn compile_node(
         | NodeValue::FnDecl
         | NodeValue::Extern => {
             unreachable!()
+        }
+        NodeValue::If => {
+            let condition = &node.children[0];
+            let expr_nodes = &node.children[1..];
+            let mut exprs = vec![];
+            for expr in expr_nodes {
+                exprs.push(compile_node!(expr)?);
+            }
+            let condition = compile_node!(condition)?.unwrap();
+
+            // Code to run if the value is true
+            let true_block = builder.push_block().unwrap();
+            // Code to run if the value is false (without and else statement, this is empty)
+            let else_block = builder.push_block().unwrap();
+            // Code to run after the if expression is complete
+            let after_block = builder.push_block().unwrap();
+
+            builder
+                .set_terminator(Terminator::Branch(condition, true_block, else_block))
+                .map_err(CodegemError::ModuleCreationError)?;
+
+            // True block
+
+            builder.switch_to_block(true_block);
+
+            builder
+                .set_terminator(Terminator::Jump(after_block))
+                .map_err(CodegemError::ModuleCreationError)?;
+
+            // Else block
+
+            builder.switch_to_block(else_block);
+
+            builder
+                .set_terminator(Terminator::Jump(after_block))
+                .map_err(CodegemError::ModuleCreationError)?;
+
+            // Return to block
+            builder.switch_to_block(after_block);
+
+            Ok(None)
         }
     }
 }

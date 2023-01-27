@@ -141,6 +141,7 @@ impl<'input> MakeSignaturesPass<'input> {
                 NodeValue::BoolExpr => todo!(),
                 NodeValue::True => todo!(),
                 NodeValue::False => todo!(),
+                NodeValue::If => todo!(),
             }
         }
 

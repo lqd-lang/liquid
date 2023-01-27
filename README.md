@@ -6,7 +6,7 @@ To install, clone this repository, then run
 
 `cargo install --path .`
 
-This will compile from scratch (~2min), and add binaries to PATH. This will require `cargo` and `clang` or `gcc` to be installed, and added to PATH ([see below](#note)).
+This will compile from scratch (~1min), and add binaries to PATH. This will require `cargo` and `clang` or `gcc` to be installed, and added to PATH ([see below](#note)).
 
 ### Note
 `lqdc` uses `clang` to compile and link by default. To use `gcc` instead, disable default features (`--no-default-features`) and enable the gcc feature flag (`-F gcc`)
